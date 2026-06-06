@@ -72,6 +72,69 @@ export interface UserSession {
   email: string;
   role: 'Administrador' | 'Gestor' | 'SDR' | 'Closer' | 'Operador';
   avatarUrl: string;
-  plan: 'Starter' | 'Pro' | 'Agência';
+  plan: string;
   credits: number;
+  teamId?: string;
+  subscriptionStatus?: 'ACTIVE' | 'PENDING' | 'OVERDUE' | 'CANCELED';
+  asaasCustomerId?: string;
+  remainingCredits?: number;
+  bonusCredits?: number;
+  planCredits?: number;
+  purchasedCredits?: number;
+  accountStatus?: 'ACTIVE' | 'LIMITED';
+}
+
+export interface SaaSPlan {
+  id: string; // 'starter' | 'pro' | 'agency' | 'enterprise'
+  name: string;
+  price: number;
+  credits: number;
+  maxUsers: number;
+  maxReports: number;
+  maxLeads: number;
+  features: string[];
+}
+
+export interface SaaSSubscription {
+  id: string;
+  userId: string;
+  teamId: string;
+  status: 'ACTIVE' | 'PENDING' | 'OVERDUE' | 'CANCELED';
+  planId: string;
+  price: number;
+  nextBillingDate: string;
+  asaasSubscriptionId?: string;
+}
+
+export interface SaaSPayment {
+  id: string;
+  userId: string;
+  teamId: string;
+  date: string;
+  amount: number;
+  method: 'pix' | 'card' | 'boleto';
+  status: 'RECEIVED' | 'PENDING' | 'CONFIRMED' | 'OVERDUE' | 'DELETED';
+  link?: string;
+}
+
+export interface SaasTeam {
+  id: string;
+  name: string;
+  ownerId: string;
+  members: Array<{
+    userId: string;
+    email: string;
+    name: string;
+    role: string;
+  }>;
+  maxMembers: number;
+}
+
+export interface SaaSActivityLog {
+  id: string;
+  userId: string;
+  userName: string;
+  action: string;
+  details: string;
+  createdAt: string;
 }

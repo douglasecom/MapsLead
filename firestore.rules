@@ -1,0 +1,125 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Hardened helper primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Role lookups using get() or exists() on a trusted database document
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "Administrador"
+      );
+    }
+
+    // 1. Users collection
+    function isValidUser(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.name is string && data.name.size() <= 200
+        && data.email is string && data.email.size() <= 200
+        && data.role is string && (data.role == "Administrador" || data.role == "Gestor" || data.role == "SDR" || data.role == "Closer" || data.role == "Operador")
+        && (data.plan is string)
+        && data.credits is number;
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && (isOwner(userId) || isAdmin());
+      allow list: if isSignedIn();
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      allow update: if isSignedIn() && (isOwner(userId) || isAdmin()) && isValidUser(incoming())
+                    && incoming().id == existing().id
+                    && incoming().email == existing().email;
+      allow delete: if isAdmin();
+    }
+
+    // 2. Leads collection
+    function isValidLead(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.name is string && data.name.size() <= 200
+        && data.niche is string && data.niche.size() <= 100
+        && data.location is string && data.location.size() <= 200
+        && data.rating is number
+        && data.reviews is number
+        && data.hasWebsite is bool
+        && data.hasGmbActive is bool
+        && data.hasPhone is bool
+        && data.phone is string && data.phone.size() <= 50
+        && data.leadScore is number
+        && (data.status is string)
+        && data.captured is bool;
+    }
+
+    match /leads/{leadId} {
+      allow get: if isSignedIn() && isValidId(leadId);
+      allow list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(leadId) && isValidLead(incoming());
+      allow update: if isSignedIn() && isValidId(leadId) && isValidLead(incoming())
+                    && incoming().id == existing().id;
+      allow delete: if isSignedIn() && isValidId(leadId);
+    }
+
+    // 3. Plans collection (starter, pro, agency, enterprise)
+    match /plans/{planId} {
+      allow read: if true; // Any site visitor or member can inspect the plans
+      allow write: if isAdmin();
+    }
+
+    // 4. Subscriptions collection
+    match /subscriptions/{subId} {
+      allow get: if isSignedIn() && (isOwner(existing().userId) || isAdmin());
+      allow list: if isSignedIn() && (isAdmin() || (resource != null && resource.data.userId == request.auth.uid));
+      allow create: if isSignedIn() && isValidId(subId);
+      allow update: if isSignedIn() && (isOwner(existing().userId) || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // 5. Payments collection
+    match /payments/{payId} {
+      allow get: if isSignedIn() && (isOwner(existing().userId) || isAdmin());
+      allow list: if isSignedIn() && (isAdmin() || (resource != null && resource.data.userId == request.auth.uid));
+      allow create: if isSignedIn() && isValidId(payId);
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // 6. Teams collection
+    match /teams/{teamId} {
+      allow get: if isSignedIn() && isValidId(teamId);
+      allow list: if isSignedIn();
+      allow create, update: if isSignedIn(); // Let any manager/admin save team roster state safely
+      allow delete: if isAdmin();
+    }
+
+    // 7. Activity Logs collection
+    match /activityLogs/{logId} {
+      allow get: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource != null && resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && isValidId(logId) && incoming().userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+  }
+}

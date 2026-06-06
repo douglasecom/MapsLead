@@ -1,6 +1,13 @@
 import React, { useState } from 'react';
 import { UserSession } from '../types';
 import { ShieldCheck, User, Mail, Lock, Sparkles, KeyRound } from 'lucide-react';
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  sendPasswordResetEmail 
+} from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { auth, db } from '../firebase';
 
 interface AuthGateProps {
   onSignIn: (session: UserSession) => void;
@@ -12,13 +19,14 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onSignIn }) => {
   const [password, setPassword] = useState('123456');
   const [name, setName] = useState('Douglas CMA');
   const [role, setRole] = useState<'Administrador' | 'Gestor' | 'SDR' | 'Closer' | 'Operador'>('Gestor');
-  const [plan, setPlan] = useState<'Starter' | 'Pro' | 'Agência'>('Agência');
+  const [plan, setPlan] = useState<'Gratuito' | 'Starter' | 'Pro' | 'Agência'>('Gratuito');
   const [isRecovering, setIsRecovering] = useState(false);
   const [recoveryEmail, setRecoveryEmail] = useState('');
   const [recoverySuccess, setRecoverySuccess] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password || (!isLogin && !name)) {
       setErrorMsg('Por favor, preencha todos os campos obrigatórios.');
@@ -30,33 +38,121 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onSignIn }) => {
       return;
     }
 
-    // Role-dependent static credits allotment
-    let credits = 1000;
-    if (plan === 'Pro') credits = 2500;
-    if (plan === 'Agência') credits = 5000;
+    setIsLoading(true);
+    setErrorMsg('');
 
-    const mockSession: UserSession = {
-      id: Math.random().toString(36).substr(2, 9),
-      name: isLogin ? (email === 'douglasbateriacma@gmail.com' ? 'Douglas CMA' : 'Membro da Equipe') : name,
-      email,
-      role: isLogin ? (email === 'douglasbateriacma@gmail.com' ? 'Gestor' : 'SDR') : role,
-      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
-      plan: isLogin ? 'Agência' : plan,
-      credits,
-    };
+    try {
+      if (isLogin) {
+        // Real Login
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+        
+        // Fetch User Profile Document in Firestore
+        const userRef = doc(db, 'users', user.uid);
+        const userSnap = await getDoc(userRef);
 
-    onSignIn(mockSession);
+        let userSession: UserSession;
+
+        if (userSnap.exists()) {
+          const profileData = userSnap.data();
+          userSession = {
+            id: user.uid,
+            name: profileData.name || 'Membro da Equipe',
+            email: user.email || email,
+            role: profileData.role || 'SDR',
+            avatarUrl: profileData.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
+            plan: profileData.plan || 'Pro',
+            credits: profileData.credits !== undefined ? profileData.credits : 1000,
+            subscriptionStatus: profileData.subscriptionStatus || 'ACTIVE'
+          };
+        } else {
+          // If profile document does not exist yet (e.g. legacy/manually created users)
+          userSession = {
+            id: user.uid,
+            name: email === 'douglasbateriacma@gmail.com' ? 'Douglas CMA' : 'Membro da Equipe',
+            email: user.email || email,
+            role: email === 'douglasbateriacma@gmail.com' ? 'Gestor' : 'SDR',
+            avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
+            plan: email === 'douglasbateriacma@gmail.com' ? 'Agência' : 'Pro',
+            credits: 2000,
+            subscriptionStatus: 'ACTIVE'
+          };
+          // Save document synchronously
+          await setDoc(userRef, userSession);
+        }
+
+        onSignIn(userSession);
+      } else {
+        // Real Sign Up / Registration
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+
+        // Role-dependent static credits allotment
+        let credits = 10;
+        if (plan === 'Starter') credits = 100;
+        if (plan === 'Pro') credits = 500;
+        if (plan === 'Agência') credits = 2000;
+
+        const newSession: UserSession = {
+          id: user.uid,
+          name: name,
+          email: user.email || email,
+          role: role,
+          avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
+          plan: plan,
+          credits: credits,
+          subscriptionStatus: 'ACTIVE',
+          planCredits: credits,
+          purchasedCredits: 0,
+          bonusCredits: 0,
+          remainingCredits: credits,
+          accountStatus: 'ACTIVE'
+        };
+
+        // Create Profile Document in Firestore /users/{userId}
+        await setDoc(doc(db, 'users', user.uid), newSession);
+
+        onSignIn(newSession);
+      }
+    } catch (err: any) {
+      console.error('Auth error:', err);
+      // Friendly messages in Portuguese for common errors
+      const code = err?.code || '';
+      if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+        setErrorMsg('E-mail ou senha incorreta. Verifique os dados e tente novamente.');
+      } else if (code === 'auth/user-not-found') {
+        setErrorMsg('Usuário não encontrado. Crie uma conta para começar.');
+      } else if (code === 'auth/email-already-in-use') {
+        setErrorMsg('Este endereço de e-mail já está sendo utilizado por outra conta.');
+      } else if (code === 'auth/network-request-failed') {
+        setErrorMsg('Erro de conexão. Verifique sua rede e tente novamente.');
+      } else {
+        setErrorMsg(err?.message || 'Ocorreu um erro ao processar a autenticação.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleRecovery = (e: React.FormEvent) => {
+  const handleRecovery = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!recoveryEmail) {
       setErrorMsg('Insira seu e-mail de cadastro.');
       return;
     }
 
-    setRecoverySuccess(true);
+    setIsLoading(true);
     setErrorMsg('');
+
+    try {
+      await sendPasswordResetEmail(auth, recoveryEmail);
+      setRecoverySuccess(true);
+    } catch (err: any) {
+      console.error('Password reset error:', err);
+      setErrorMsg(err?.message || 'Não foi possível enviar o link de redefinição.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -274,9 +370,10 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onSignIn }) => {
                         onChange={(e) => setPlan(e.target.value as any)}
                         className="w-full bg-[#1e293b]/70 border border-slate-800 rounded-xl py-3 px-4 text-xs text-white font-extrabold cursor-pointer focus:outline-none focus:border-blue-500"
                       >
-                        <option value="Starter">Starter (200 cr.)</option>
-                        <option value="Pro">Pro (1000 cr.)</option>
-                        <option value="Agência">Agência (5000 cr.)</option>
+                        <option value="Gratuito">Gratuito (10 cr.)</option>
+                        <option value="Starter">Starter (100 cr.)</option>
+                        <option value="Pro">Pro (500 cr.)</option>
+                        <option value="Agência">Agência (2000 cr.)</option>
                       </select>
                     </div>
                   </div>
@@ -291,9 +388,10 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onSignIn }) => {
 
                 <button 
                   type="submit" 
-                  className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3.5 rounded-xl transition-all hover:shadow-lg hover:shadow-blue-500/15 cursor-pointer text-xs uppercase tracking-wider block"
+                  disabled={isLoading}
+                  className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 disabled:opacity-50 text-white font-bold py-3.5 rounded-xl transition-all hover:shadow-lg hover:shadow-blue-500/15 cursor-pointer text-xs uppercase tracking-wider block"
                 >
-                  {isLogin ? 'Entrar no Sistema' : 'Finalizar Cadastro'}
+                  {isLoading ? 'Solicitando...' : (isLogin ? 'Entrar no Sistema' : 'Finalizar Cadastro')}
                 </button>
 
               </form>

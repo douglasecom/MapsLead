@@ -1,0 +1,155 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile containing roles, credits, team association, and subscriptions.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["Administrador", "Gestor", "SDR", "Closer", "Operador"] },
+        "avatarUrl": { "type": "string" },
+        "plan": { "type": "string" },
+        "credits": { "type": "number" },
+        "remainingCredits": { "type": "number" },
+        "bonusCredits": { "type": "number" },
+        "planCredits": { "type": "number" },
+        "purchasedCredits": { "type": "number" },
+        "accountStatus": { "type": "string", "enum": ["ACTIVE", "LIMITED"] },
+        "teamId": { "type": "string" },
+        "subscriptionStatus": { "type": "string", "enum": ["ACTIVE", "PENDING", "OVERDUE", "CANCELED"] },
+        "asaasCustomerId": { "type": "string" }
+      },
+      "required": ["id", "name", "email", "role", "plan", "credits"]
+    },
+    "Lead": {
+      "title": "Lead",
+      "description": "B2B sales lead captured or generated from Google Maps.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "niche": { "type": "string" },
+        "location": { "type": "string" },
+        "rating": { "type": "number" },
+        "reviews": { "type": "number" },
+        "hasWebsite": { "type": "boolean" },
+        "hasGmbActive": { "type": "boolean" },
+        "hasPhone": { "type": "boolean" },
+        "phone": { "type": "string" },
+        "leadScore": { "type": "number" },
+        "status": { "type": "string" },
+        "captured": { "type": "boolean" },
+        "capturedAt": { "type": "string" },
+        "gmbAnalysis": { "type": "string" }
+      },
+      "required": ["id", "name", "niche", "location", "rating", "reviews", "hasWebsite", "hasGmbActive", "hasPhone", "phone", "leadScore", "status", "captured", "gmbAnalysis"]
+    },
+    "SaaSPlan": {
+      "title": "SaaSPlan",
+      "description": "Applet commercial plan quotas and parameters.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "price": { "type": "number" },
+        "credits": { "type": "number" },
+        "maxUsers": { "type": "number" },
+        "maxReports": { "type": "number" },
+        "maxLeads": { "type": "number" },
+        "features": { "type": "array" }
+      },
+      "required": ["id", "name", "price", "credits", "maxUsers", "maxReports", "maxLeads", "features"]
+    },
+    "SaaSSubscription": {
+      "title": "SaaSSubscription",
+      "description": "The current state of organization subscriptions.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "teamId": { "type": "string" },
+        "status": { "type": "string" },
+        "planId": { "type": "string" },
+        "price": { "type": "number" },
+        "nextBillingDate": { "type": "string" },
+        "asaasSubscriptionId": { "type": "string" }
+      },
+      "required": ["id", "userId", "status", "planId", "price", "nextBillingDate"]
+    },
+    "SaaSPayment": {
+      "title": "SaaSPayment",
+      "description": "Log of monthly fees processed on the subscription gateway.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "teamId": { "type": "string" },
+        "date": { "type": "string" },
+        "amount": { "type": "number" },
+        "method": { "type": "string" },
+        "status": { "type": "string" },
+        "link": { "type": "string" }
+      },
+      "required": ["id", "userId", "date", "amount", "method", "status"]
+    },
+    "SaaSTeam": {
+      "title": "SaaSTeam",
+      "description": "Team groups to enforce seat controls matching subscriptions.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "members": { "type": "array" },
+        "maxMembers": { "type": "number" }
+      },
+      "required": ["id", "ownerId", "members", "maxMembers"]
+    },
+    "SaaSActivityLog": {
+      "title": "SaaSActivityLog",
+      "description": "System usage audit trails.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "action": { "type": "string" },
+        "details": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "userName", "action", "details", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile with tenancy details."
+    },
+    "/leads/{leadId}": {
+      "schema": "Lead",
+      "description": "Leads acquired by active organizations."
+    },
+    "/plans/{planId}": {
+      "schema": "SaaSPlan",
+      "description": "SaaS pricing plans of the application."
+    },
+    "/subscriptions/{subId}": {
+      "schema": "SaaSSubscription",
+      "description": "Asaas integrated recurring subscriptions."
+    },
+    "/payments/{payId}": {
+      "schema": "SaaSPayment",
+      "description": "Log of monthly fees processed on the subscription gateway."
+    },
+    "/teams/{teamId}": {
+      "schema": "SaaSTeam",
+      "description": "Multi-user team associations to control team seats limit."
+    },
+    "/activityLogs/{logId}": {
+      "schema": "SaaSActivityLog",
+      "description": "Audit trails logged for CRM and operations."
+    }
+  }
+}

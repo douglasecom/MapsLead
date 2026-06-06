@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   LayoutDashboard,
   Search,
@@ -18,6 +18,7 @@ import {
   RotateCcw,
   Edit,
   Trash2,
+  Coins,
   Filter,
   Users2,
   Activity,
@@ -37,7 +38,8 @@ import {
   ChevronRight,
   Sparkle,
   Bookmark,
-  Share2
+  Share2,
+  FileText
 } from "lucide-react";
 import { initialLeads } from "./initialData";
 import { Lead, GeneratedMessage, UserSession } from "./types";
@@ -47,6 +49,11 @@ import { KanbanCRM } from "./components/KanbanCRM";
 import { RadarDigital } from "./components/RadarDigital";
 import { ComercialDash } from "./components/ComercialDash";
 import { CopilotoIA } from "./components/CopilotoIA";
+import { DocumentGenerator } from "./components/DocumentGenerator";
+import { LojaCreditos } from "./components/LojaCreditos";
+import { AdminCredits } from "./components/AdminCredits";
+import { collection, getDocs, setDoc, deleteDoc, doc, onSnapshot, getDoc } from "firebase/firestore";
+import { db } from "./firebase";
 
 export default function App() {
   // Authentication & session context
@@ -75,6 +82,92 @@ export default function App() {
   const [dailyQuotaCount, setDailyQuotaCount] = useState<number>(14);
   const [notifications, setNotifications] = useState<Array<{ id: string; text: string; type: "success" | "warning" | "info" }>>([]);
   
+  // Freemium pricing blocker configurations
+  const [showPremiumBlockerModal, setShowPremiumBlockerModal] = useState<boolean>(false);
+  const [adminSubTab, setAdminSubTab] = useState<"perfil" | "creditos">("perfil");
+
+  // Premium feature validator for the FREE/Gratuito plan users
+  const isFeaturePremiumRestricted = (featureName: string): boolean => {
+    const planName = session?.plan || 'Gratuito';
+    const isFree = planName.toLowerCase() === 'gratuito' || planName.toLowerCase() === 'free';
+    if (isFree) {
+      triggerNotification(`O recurso "${featureName}" faz parte dos planos de assinatura paga. Faça seu upgrade!`, "warning");
+      setShowPremiumBlockerModal(true);
+      return true;
+    }
+    return false;
+  };
+
+  // Centralized Credit Consumption Logic with priority deduction
+  const handleCentralConsumeCredit = async (action: 'capture' | 'ai_analysis'): Promise<boolean> => {
+    if (!session) {
+      triggerNotification("Faça login para continuar.", "warning");
+      return false;
+    }
+
+    // Load fresh data first to prevent race updates
+    const userRef = doc(db, "users", session.id);
+    const userSnap = await getDoc(userRef);
+    if (!userSnap.exists()) {
+      triggerNotification("Usuário não encontrado na base de dados.", "warning");
+      return false;
+    }
+
+    const userData = userSnap.data();
+    let pCredits = userData.planCredits !== undefined ? userData.planCredits : (userData.credits || 0);
+    let purCredits = userData.purchasedCredits || 0;
+    let bCredits = userData.bonusCredits || 0;
+    let remCredits = userData.remainingCredits !== undefined ? userData.remainingCredits : (pCredits + purCredits + bCredits);
+
+    if (remCredits <= 0) {
+      setShowPremiumBlockerModal(true);
+      triggerNotification("Seu plano está suspenso ou sem créditos recomendados. Recarregue agora.", "warning");
+      return false;
+    }
+
+    // Deduct total by 1
+    remCredits = Math.max(0, remCredits - 1);
+
+    // Deduct priority pools (1st: plan, 2nd: purchased, 3rd: bonus)
+    if (pCredits > 0) {
+      pCredits--;
+    } else if (purCredits > 0) {
+      purCredits--;
+    } else if (bCredits > 0) {
+      bCredits--;
+    } else {
+      // Security fallback
+      triggerNotification("Erro: Sem créditos disponíveis no momento.", "warning");
+      return false;
+    }
+
+    // Log gamified feedback milestones (at 50%, 80%, & 100% of the Free credits allocation of 10)
+    const isFreePlan = (session.plan || "Gratuito").toLowerCase() === 'gratuito' || (session.plan || "Gratuito").toLowerCase() === 'free';
+    if (isFreePlan) {
+      const initialPool = 10;
+      const consumed = initialPool - pCredits;
+      if (consumed === 5) {
+        triggerNotification("💡 Você consumiu 50% dos seus créditos de teste gratuito do MapsLeads!", "info");
+      } else if (consumed === 8) {
+        triggerNotification("⚠️ Atenção: Você atingiu 80% do seu limite gratuito mensal! Considere reabastecer créditos avulsos ou assinar.", "warning");
+      } else if (consumed === 10) {
+        triggerNotification("🚫 Alerta 100%: Você atingiu o limite máximo de prospecção do Plano Gratuito. Adquira mais créditos!", "warning");
+      }
+    }
+
+    // Update in database
+    await setDoc(userRef, {
+      planCredits: pCredits,
+      purchasedCredits: purCredits,
+      bonusCredits: bCredits,
+      remainingCredits: remCredits,
+      credits: remCredits, // Keep old parameter in sync
+      accountStatus: remCredits <= 0 ? 'LIMITED' : 'ACTIVE'
+    }, { merge: true });
+
+    return true;
+  };
+  
   // Lead Search state
   const [searchNiche, setSearchNiche] = useState<string>("Padaria");
   const [searchLocation, setSearchLocation] = useState<string>("São Paulo, SP");
@@ -85,6 +178,7 @@ export default function App() {
   
   // Lead detailed profile modal state
   const [selectedLeadProfile, setSelectedLeadProfile] = useState<Lead | null>(null);
+  const [selectedLeadForDocs, setSelectedLeadForDocs] = useState<Lead | null>(null);
 
   // Client-side filtering state for "Leads" tab
   const [leadsFilter, setLeadsFilter] = useState<"todos" | "sem_site" | "quente" | "nicho">("todos");
@@ -117,9 +211,182 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
     }, 4500);
   };
 
+  // --- FIREBASE SYNC INTEGRATION ENGINE ---
+  const lastSyncLeadsRef = useRef<Lead[]>([]);
+
+  // 1. Initial database fetch & seed
+  useEffect(() => {
+    if (session) {
+      const loadDatabase = async () => {
+        try {
+          const querySnapshot = await getDocs(collection(db, "leads"));
+          if (!querySnapshot.empty) {
+            const loadedLeads: Lead[] = [];
+            querySnapshot.forEach((docSnap) => {
+              loadedLeads.push({ id: docSnap.id, ...docSnap.data() } as Lead);
+            });
+            // Preserving state and seeding ref
+            setLeads(loadedLeads);
+            lastSyncLeadsRef.current = loadedLeads;
+          } else {
+            // First run: Seed from initialLeads so a warm CRM welcomes the user
+            for (const item of initialLeads) {
+              await setDoc(doc(db, "leads", item.id), item);
+            }
+            setLeads(initialLeads);
+            lastSyncLeadsRef.current = initialLeads;
+          }
+        } catch (err) {
+          console.error("Erro carregando leads do Firestore:", err);
+          // Safe robust fallback in case of latency or offline state
+          setLeads(initialLeads);
+          lastSyncLeadsRef.current = initialLeads;
+        }
+      };
+
+      loadDatabase();
+    }
+  }, [session]);
+
+  // 2. Multi-collection reactive lead mutations replicator
+  useEffect(() => {
+    if (!session) return;
+
+    const syncChanges = async () => {
+      const prevLeads = lastSyncLeadsRef.current;
+      
+      // Sync added or updated items
+      for (const lead of leads) {
+        const prevLead = prevLeads.find(p => p.id === lead.id);
+        if (!prevLead || JSON.stringify(prevLead) !== JSON.stringify(lead)) {
+          try {
+            await setDoc(doc(db, "leads", lead.id), lead);
+          } catch (err) {
+            console.error(`Erro replicando lead: ${lead.name}`, err);
+          }
+        }
+      }
+
+      // Sync deleted items
+      for (const prevLead of prevLeads) {
+        const currentLead = leads.find(l => l.id === prevLead.id);
+        if (!currentLead) {
+          try {
+            await deleteDoc(doc(db, "leads", prevLead.id));
+          } catch (err) {
+            console.error(`Erro deletando lead do Firestore: ${prevLead.name}`, err);
+          }
+        }
+      }
+
+      lastSyncLeadsRef.current = leads;
+    };
+
+    syncChanges();
+  }, [leads, session]);
+
+  // 3. Real-Time listener for User Profile (keeps credits, planes, and status live)
+  useEffect(() => {
+    if (!session) return;
+
+    const userRef = doc(db, "users", session.id);
+    const unsubscribe = onSnapshot(userRef, async (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        
+        // Dynamic Month Renewal Logic: On new month, reset planCredits to 10 if plan is FREE
+        const currentMonthString = new Date().toISOString().substring(0, 7);
+        const planStr = (data.plan || "Gratuito").toLowerCase();
+        
+        if (planStr === "gratuito" || planStr === "free") {
+          if (!data.lastMonthlyRenewal || data.lastMonthlyRenewal !== currentMonthString) {
+            try {
+              const freshPlanCredits = 10;
+              const freshPurchased = data.purchasedCredits || 0;
+              const freshBonus = data.bonusCredits || 0;
+              const freshTotal = freshPlanCredits + freshPurchased + freshBonus;
+
+              await setDoc(userRef, {
+                planCredits: freshPlanCredits,
+                remainingCredits: freshTotal,
+                credits: freshTotal,
+                lastMonthlyRenewal: currentMonthString,
+                accountStatus: "ACTIVE"
+              }, { merge: true });
+
+              triggerNotification("Renovação Mensal: Seus 10 créditos gratuitos foram recarregados com sucesso!", "success");
+              return; // next snapshot will update the state with renewed numbers
+            } catch (err) {
+              console.error("Falha no reset mensal de créditos:", err);
+            }
+          }
+        }
+
+        setSession(prev => prev ? { 
+          ...prev, 
+          plan: data.plan || prev.plan,
+          credits: data.credits !== undefined ? data.credits : prev.credits,
+          subscriptionStatus: data.subscriptionStatus || 'ACTIVE',
+          remainingCredits: data.remainingCredits !== undefined ? data.remainingCredits : (data.credits || 0),
+          bonusCredits: data.bonusCredits || 0,
+          planCredits: data.planCredits !== undefined ? data.planCredits : (data.credits || 0),
+          purchasedCredits: data.purchasedCredits || 0,
+          accountStatus: data.accountStatus || 'ACTIVE'
+        } : null);
+        
+        if (data.credits !== undefined) {
+          setCredits(data.credits);
+        }
+        if (data.name) {
+          setManagerName(data.name);
+        }
+        if (data.role) {
+          setManagerRole(data.role);
+        }
+      }
+    }, (err) => {
+      console.error("Erro no listener de faturamento do usuario:", err);
+    });
+
+    return () => unsubscribe();
+  }, [session?.id]);
+
+  // Sync edits to metadata
+  useEffect(() => {
+    if (!session) return;
+    const syncProfileChanges = async () => {
+      try {
+        await setDoc(doc(db, "users", session.id), {
+          id: session.id,
+          name: managerName,
+          email: managerEmail,
+          role: managerRole
+        }, { merge: true });
+      } catch (err) {
+        console.error("Erro sincronizando perfil do SDR:", err);
+      }
+    };
+    syncProfileChanges();
+  }, [managerName, managerEmail, managerRole]);
+  // --- END FIREBASE INTEGRATION ENGINE ---
+
   // Perform Gemini Search for Leads
   const handleSearchLeads = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    
+    // Check SaaS subscriptional status guard
+    if (session?.subscriptionStatus === 'PENDING' || session?.subscriptionStatus === 'OVERDUE') {
+      triggerNotification("Seu plano está suspenso devido a faturamento pendente no Asaas. Acesse a aba Assinaturas para regularizar seu acesso.", "warning");
+      return;
+    }
+
+    // Freemium credit and limitation block guard (prevents searching)
+    if (session?.accountStatus === 'LIMITED' || (session?.remainingCredits !== undefined && session.remainingCredits <= 0)) {
+      setShowPremiumBlockerModal(true);
+      triggerNotification("Busca bloqueada. Seu saldo de créditos do plano gratuito acabou. Compre mais créditos ou mude de plano.", "warning");
+      return;
+    }
+
     setIsSearching(true);
     setSearchedYet(true);
     
@@ -179,17 +446,21 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
   };
 
   // Capture Lead and save in list
-  const handleCaptureLead = (lead: Lead) => {
+  const handleCaptureLead = async (lead: Lead) => {
     // Check if copy already captured
     if (leads.find(l => l.name.toLowerCase() === lead.name.toLowerCase() && l.location === lead.location)) {
       triggerNotification("Este lead já está na sua carteira de contatos!", "info");
       return;
     }
 
-    if (credits <= 10) {
-      triggerNotification("Créditos insuficientes! Faça o upgrade de seu plano.", "warning");
+    if (session?.accountStatus === 'LIMITED' || (session?.remainingCredits !== undefined && session.remainingCredits <= 0)) {
+      setShowPremiumBlockerModal(true);
+      triggerNotification("Sua conta está limitada. Compre mais créditos para continuar capturando leads.", "warning");
       return;
     }
+
+    const success = await handleCentralConsumeCredit('capture');
+    if (!success) return;
 
     const updatedLead: Lead = {
       ...lead,
@@ -199,21 +470,30 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
     };
 
     setLeads(prev => [updatedLead, ...prev]);
-    setCredits(prev => prev - 10);
     setDailyQuotaCount(prev => prev + 1);
     
     // Also, update result lists
     setSearchResults(prev => prev.map(l => l.name === lead.name ? { ...l, captured: true } : l));
     
-    triggerNotification(`Lead "${lead.name}" capturado com sucesso! (-10 créditos)`, "success");
+    triggerNotification(`Lead "${lead.name}" capturado com sucesso! (-1 crédito)`, "success");
   };
 
   // Generate Approach pitching with Gemini
   const handleGenerateAICopyMessage = async () => {
-    if (credits <= 15) {
-      triggerNotification("Créditos de IA insuficientes! Recarregue seus créditos.", "info");
+    // Check SaaS subscriptional status guard
+    if (session?.subscriptionStatus === 'PENDING' || session?.subscriptionStatus === 'OVERDUE') {
+      triggerNotification("Seu plano está suspenso devido a faturamento pendente no Asaas. Acesse a aba Assinaturas para regularizar seu acesso.", "warning");
       return;
     }
+
+    if (session?.accountStatus === 'LIMITED' || (session?.remainingCredits !== undefined && session.remainingCredits <= 0)) {
+      setShowPremiumBlockerModal(true);
+      triggerNotification("Sua conta do plano gratuito está sem créditos. Adquira mais créditos para gerar.", "warning");
+      return;
+    }
+
+    const success = await handleCentralConsumeCredit('ai_analysis');
+    if (!success) return;
 
     setIsGeneratingAI(true);
     triggerNotification("Analisando perfil digital e gerando abordagem inovadora...", "info");
@@ -236,8 +516,7 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
       const data = await response.json();
       if (data.text) {
         setGeneratedMessageText(data.text);
-        setCredits(prev => prev - 15);
-        triggerNotification("Nova abordagem inteligente gerada com sucesso! (-15 créditos)", "success");
+        triggerNotification("Nova abordagem inteligente gerada com sucesso! (-1 crédito)", "success");
       } else {
         throw new Error("Resposta de cópia vazia.");
       }
@@ -271,6 +550,16 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
 
   // Export Leads list to CSV simulation
   const handleExportCSV = () => {
+    // Check SaaS subscriptional status guard
+    if (session?.subscriptionStatus === 'PENDING' || session?.subscriptionStatus === 'OVERDUE') {
+      triggerNotification("Seu plano está suspenso devido a faturamento pendente no Asaas. Acesse a aba Assinaturas para regularizar seu acesso.", "warning");
+      return;
+    }
+
+    if (isFeaturePremiumRestricted("Exportação de Banco de Leads")) {
+      return;
+    }
+
     triggerNotification("Exportando carteira de Leads qualificados com sucesso (CSV)!", "success");
   };
 
@@ -372,6 +661,34 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
               <Sparkles className="w-5 h-5" />
             </div>
             <span className="font-extrabold text-xl tracking-tight bg-gradient-to-r from-blue-700 to-indigo-900 bg-clip-text text-transparent">MapsLeads</span>
+          </div>
+
+          {/* Dynamic Indicator Visual (Permanente no topo) */}
+          <div className="hidden lg:flex items-center gap-6 border-l pl-6 border-slate-200">
+            <div className="flex flex-col">
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Plano Atual</span>
+              <span className="text-xs font-black text-slate-800 flex items-center gap-1">
+                <span className={`w-2 h-2 rounded-full ${(session?.plan || 'Gratuito').toLowerCase() === 'gratuito' ? 'bg-zinc-400' : 'bg-emerald-500 animate-pulse'}`}></span>
+                {session?.plan || 'Gratuito'}
+              </span>
+            </div>
+            
+            <div className="flex flex-col">
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Leads Restantes</span>
+              <span className="text-xs font-black text-slate-800">
+                {(session?.plan || 'Gratuito').toLowerCase() === 'gratuito'
+                  ? `${session?.planCredits !== undefined ? session.planCredits : 10} de 10`
+                  : `${session?.planCredits !== undefined ? session.planCredits : 500} de 500`
+                } restantes
+              </span>
+            </div>
+
+            <div className="flex flex-col font-mono text-xs">
+              <span className="text-[10px] text-slate-400 font-sans font-bold uppercase tracking-wider">Créditos Comprados</span>
+              <span className="text-xs font-black text-blue-700">
+                +{session?.purchasedCredits || 0} adicionais
+              </span>
+            </div>
           </div>
 
           <div className="flex items-center gap-4">
@@ -492,7 +809,10 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
 
             <button 
               id="sidebar-tab-radar"
-              onClick={() => setActiveTab("radar")} 
+              onClick={() => {
+                if (isFeaturePremiumRestricted("Radar Digital Avançado")) return;
+                setActiveTab("radar");
+              }} 
               className={`flex items-center gap-3 px-4 py-3 rounded-lg font-bold text-sm transition-all text-left ${
                 activeTab === "radar" 
                   ? "bg-blue-50 text-blue-700 border-l-4 border-blue-600 font-extrabold" 
@@ -527,6 +847,22 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
             >
               <Sparkles className="w-5 h-5 shrink-0" />
               <span>Gerador de Mensagem IA</span>
+            </button>
+
+            <button 
+              id="sidebar-tab-loja-creditos"
+              onClick={() => setActiveTab("loja_creditos")} 
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-bold text-sm transition-all text-left ${
+                activeTab === "loja_creditos" 
+                  ? "bg-amber-50 text-amber-700 border-l-4 border-amber-500 font-extrabold" 
+                  : "text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              <Coins className="w-5 h-5 shrink-0 text-amber-500 animate-pulse" />
+              <span className="flex items-center gap-1.5">
+                <span>Comprar Créditos</span>
+                <span className="bg-amber-100 text-amber-850 text-[8px] px-1.5 py-0.5 rounded font-black uppercase">Promo</span>
+              </span>
             </button>
 
             <button 
@@ -1797,8 +2133,29 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
                 </div>
               </div>
 
-              {/* Bento Grid panels */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* Sub tabs nested in administration */}
+              <div className="flex border-b border-slate-200 gap-4">
+                <button 
+                  onClick={() => setAdminSubTab("perfil")}
+                  className={`pb-3 text-sm font-bold border-b-2 transition-all ${adminSubTab === "perfil" ? "border-blue-600 text-blue-600 font-extrabold" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+                >
+                  Perfil Profissional & IA
+                </button>
+                <button 
+                  onClick={() => setAdminSubTab("creditos")}
+                  className={`pb-3 text-sm font-bold border-b-2 transition-all ${adminSubTab === "creditos" ? "border-blue-600 text-blue-600 font-extrabold" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+                >
+                  Gestão Comercial de Créditos & Métricas
+                </button>
+              </div>
+
+              {adminSubTab === "creditos" && (
+                <AdminCredits triggerNotification={triggerNotification} />
+              )}
+
+              {adminSubTab === "perfil" &&
+                /* Bento Grid panels */
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 
                 {/* Information update card */}
                 <div className="lg:col-span-8 bg-white border border-slate-200 p-6 rounded-3xl shadow-sm space-y-6">
@@ -2025,9 +2382,8 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
                   </div>
 
                 </div>
-
               </div>
-
+              }
             </div>
           )}
 
@@ -2080,12 +2436,102 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
                   }
                 }} 
                 triggerNotification={triggerNotification} 
+                userId={session?.id}
+                userRole={session?.role}
+              />
+            </div>
+          )}
+
+          {/* TAB: LOJA DE CRÉDITOS AVULSOS */}
+          {activeTab === "loja_creditos" && (
+            <div id="tab-loja-creditos-view" className="space-y-6 animate-in fade-in duration-300">
+              <div>
+                <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Loja de Créditos</h2>
+                <p className="text-slate-500 mt-1">Reabasteça seus créditos para continuar decolando sua prospecção de leads e análises inteligentes.</p>
+              </div>
+              <LojaCreditos 
+                userId={session?.id || ''}
+                triggerNotification={triggerNotification}
               />
             </div>
           )}
 
         </main>
       </div>
+
+      {/* Premium Lockout Blocker Modal Overlay */}
+      {showPremiumBlockerModal && (
+        <div id="modal-premium-blocker" className="fixed inset-0 bg-slate-950/70 backdrop-blur-md z-[110] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl w-full max-w-lg border border-slate-200 shadow-2xl overflow-hidden relative p-8 text-center space-y-6">
+            
+            <button 
+              onClick={() => setShowPremiumBlockerModal(false)}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50 transition-all"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="w-16 h-16 bg-blue-50 border border-blue-200 text-blue-600 rounded-full flex items-center justify-center mx-auto shadow-sm animate-bounce">
+              <Sparkles className="w-8 h-8" />
+            </div>
+
+            <div className="space-y-2">
+              <span className="text-[10px] font-black tracking-widest text-blue-600 uppercase">Limite Atingido • Plano Gratuito</span>
+              <h3 className="text-2xl font-black text-slate-900 tracking-tight">Liberte o Potencial do MapsLeads!</h3>
+              <p className="text-slate-500 text-sm leading-relaxed max-w-sm mx-auto font-medium">
+                Seu saldo de testes acabou. Faça o upgrade de seu plano comercial ou compre créditos avulsos para continuar extraindo leads e gerando mensagens com inteligência artificial.
+              </p>
+            </div>
+
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col gap-2.5 text-left text-xs text-slate-600 font-semibold">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span>Pesquisa de leads ilimitada em todo o Brasil</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span>Auditoria de SSL, Pixel e SEO completos no Radar Digital</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span>Exportação completa em segundos para planilhas CSV/XLS</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span>Criação ilimitada de pitches ultra-persuasivos com IA</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 pt-2">
+              <button
+                onClick={() => {
+                  setShowPremiumBlockerModal(false);
+                  setActiveTab("loja_creditos");
+                }}
+                className="flex-1 bg-amber-500 hover:bg-amber-600 text-white font-extrabold py-3.5 px-6 rounded-xl text-xs active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
+              >
+                <Coins className="w-4 h-4 text-white" />
+                <span>Recarregar Créditos</span>
+              </button>
+              <button
+                onClick={() => {
+                  setShowPremiumBlockerModal(false);
+                  setActiveTab("comercial");
+                }}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-3.5 px-6 rounded-xl text-xs active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
+              >
+                <DollarSign className="w-4 h-4 text-white" />
+                <span>Assinar Plano Mensal</span>
+              </button>
+            </div>
+
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+              Nenhuma fidelidade obrigatória • Cancele quando quiser
+            </p>
+
+          </div>
+        </div>
+      )}
 
       {/* Dynamic Profile Detailed Modal Overlay Popup */}
       {selectedLeadProfile && (
@@ -2221,49 +2667,78 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
                     </div>
 
                     {/* Google Stitch Integration CTA Container */}
-                    <div className="bg-gradient-to-tr from-indigo-950 to-slate-900 text-white rounded-3xl p-5 border border-indigo-900 shadow-md relative overflow-hidden">
-                      <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-blue-550/10 rounded-full blur-lg"></div>
-                      
-                      <div className="flex items-center gap-2 mb-2 animate-pulse">
-                        <Globe className="w-4 h-4 text-blue-400" />
-                        <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">Criador de Portais Google Stitch</span>
+                    {(session?.plan || 'Gratuito').toLowerCase() === 'gratuito' || (session?.plan || 'Gratuito').toLowerCase() === 'free' ? (
+                      <div className="bg-gradient-to-tr from-slate-900 via-indigo-950/90 to-slate-900 text-white rounded-3xl p-5 border border-indigo-900 shadow-md relative overflow-hidden text-center min-h-[220px]">
+                        <div className="absolute inset-0 bg-slate-950/75 backdrop-blur-sm flex flex-col justify-center items-center p-4 z-10 text-center">
+                          <Globe className="w-8 h-8 text-amber-500 mb-2 animate-bounce" />
+                          <h5 className="font-extrabold text-sm text-amber-400">Google Stitch Bloqueado</h5>
+                          <p className="text-[11px] text-zinc-300 max-w-xs mx-auto mt-0.5 leading-relaxed font-semibold">
+                            A integração avançada com o Google Stitch para criação automática de sites experimentais está disponível apenas para parceiros comerciais premium.
+                          </p>
+                          <button 
+                            onClick={() => {
+                              setSelectedLeadProfile(null);
+                              setActiveTab("comercial");
+                              setShowPremiumBlockerModal(true);
+                            }}
+                            className="mt-3 bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-2.5 px-4 rounded-xl text-[10px] uppercase shadow-md active:scale-95 transition-all cursor-pointer"
+                          >
+                            Liberar Integrações
+                          </button>
+                        </div>
+                        {/* Dummy background layout */}
+                        <div className="opacity-10 pointer-events-none select-none">
+                          <h5 className="font-extrabold text-sm text-white">Criar e implantar site experimental</h5>
+                          <div className="bg-black/30 rounded-xl p-3 mb-2 text-[11px]">
+                            {analysis.stitchPrompt}
+                          </div>
+                        </div>
                       </div>
+                    ) : (
+                      <div className="bg-gradient-to-tr from-indigo-950 to-slate-900 text-white rounded-3xl p-5 border border-indigo-900 shadow-md relative overflow-hidden">
+                        <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-blue-550/10 rounded-full blur-lg"></div>
+                        
+                        <div className="flex items-center gap-2 mb-2 animate-pulse">
+                          <Globe className="w-4 h-4 text-blue-400" />
+                          <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">Criador de Portais Google Stitch</span>
+                        </div>
 
-                      <h5 className="font-extrabold text-sm text-white">Criar e implantar site experimental</h5>
-                      <p className="text-xs text-slate-300 leading-relaxed mt-1 font-semibold mb-4">
-                        O Google Stitch permite prototipar sites funcionais instantâneos a partir de prompts descritivos estruturados. Copie nosso briefing e envie-o.
-                      </p>
+                        <h5 className="font-extrabold text-sm text-white">Criar e implantar site experimental</h5>
+                        <p className="text-xs text-slate-300 leading-relaxed mt-1 font-semibold mb-4">
+                          O Google Stitch permite prototipar sites funcionais instantâneos a partir de prompts descritivos estruturados. Copie nosso briefing e envie-o.
+                        </p>
 
-                      <div className="bg-black/30 rounded-xl p-3 border border-white/5 mb-4 text-[11px] text-slate-300 font-mono select-all max-h-32 overflow-y-auto whitespace-pre-wrap leading-relaxed">
-                        {analysis.stitchPrompt}
+                        <div className="bg-black/30 rounded-xl p-3 border border-white/5 mb-4 text-[11px] text-slate-300 font-mono select-all max-h-32 overflow-y-auto whitespace-pre-wrap leading-relaxed">
+                          {analysis.stitchPrompt}
+                        </div>
+
+                        <div className="flex flex-wrap gap-2.5">
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(analysis.stitchPrompt);
+                              triggerNotification("Briefing técnico copiado! Cole-o no editor do Google Stitch.", "success");
+                            }}
+                            className="flex-1 bg-white/10 hover:bg-white/20 border border-white/10 text-white font-extrabold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>Copiar Briefing</span>
+                          </button>
+
+                          <a
+                            href="https://stitch.withgoogle.com/"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={() => {
+                              triggerNotification("Redirecionando para o Stitch! Use o briefing copiado para desenhar a página.", "info");
+                            }}
+                            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all shadow-md hover:shadow-blue-500/15 cursor-pointer active:scale-95 no-underline"
+                          >
+                            <span>Criar no Google Stitch</span>
+                            <ExternalLink className="w-3.5 h-3.5 text-white" />
+                          </a>
+                        </div>
                       </div>
-
-                      <div className="flex flex-wrap gap-2.5">
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(analysis.stitchPrompt);
-                            triggerNotification("Briefing técnico copiado! Cole-o no editor do Google Stitch.", "success");
-                          }}
-                          className="flex-1 bg-white/10 hover:bg-white/20 border border-white/10 text-white font-extrabold py-2.5 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-                        >
-                          <Copy className="w-3.5 h-3.5" />
-                          <span>Copiar Briefing</span>
-                        </button>
-
-                        <a
-                          href="https://stitch.withgoogle.com/"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={() => {
-                            triggerNotification("Redirecionando para o Stitch! Use o briefing copiado para desenhar a página.", "info");
-                          }}
-                          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all shadow-md hover:shadow-blue-500/15 cursor-pointer active:scale-95 no-underline"
-                        >
-                          <span>Criar no Google Stitch</span>
-                          <ExternalLink className="w-3.5 h-3.5 text-white" />
-                        </a>
-                      </div>
-                    </div>
+                    )}
 
                   </div>
                 );
@@ -2359,12 +2834,27 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
             </div>
 
             {/* Modal actions footer */}
-            <div className="p-6 bg-slate-50 border-t flex justify-end gap-2">
+            <div className="p-6 bg-slate-50 border-t flex flex-wrap justify-end gap-2">
               <button 
                 onClick={() => setSelectedLeadProfile(null)}
                 className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs active:scale-95 transition-colors cursor-pointer"
               >
                 Voltar
+              </button>
+
+              <button 
+                onClick={() => {
+                  if (session?.subscriptionStatus === 'PENDING' || session?.subscriptionStatus === 'OVERDUE') {
+                    triggerNotification("Seu plano está suspenso devido a faturamento pendente no Asaas. Acesse a aba Assinaturas para regularizar seu acesso.", "warning");
+                    return;
+                  }
+                  setSelectedLeadForDocs(selectedLeadProfile);
+                  setSelectedLeadProfile(null);
+                }}
+                className="bg-emerald-600 text-white hover:bg-emerald-700 py-2.5 px-5 rounded-xl font-bold text-xs flex items-center gap-1.5 border-none cursor-pointer active:scale-95 shadow-sm"
+              >
+                <FileText className="w-4 h-4 text-emerald-250 animate-pulse" />
+                <span>Emitir Proposta & Contrato (Fase 5)</span>
               </button>
 
               <button 
@@ -2381,6 +2871,14 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
 
           </div>
         </div>
+      )}
+
+      {selectedLeadForDocs && (
+        <DocumentGenerator
+          lead={selectedLeadForDocs}
+          onClose={() => setSelectedLeadForDocs(null)}
+          triggerNotification={triggerNotification}
+        />
       )}
 
       {/* Persistent Bottom Mobile Navigation Bar */}
