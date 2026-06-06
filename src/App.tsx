@@ -46,6 +46,7 @@ import { initialLeads } from "./initialData";
 import { Lead, GeneratedMessage, UserSession } from "./types";
 import { generateLeadWebsiteAnalysis } from "./utils/stitchHelper";
 import { AuthGate } from "./components/AuthGate";
+import { LandingPage } from "./components/LandingPage";
 import { KanbanCRM } from "./components/KanbanCRM";
 import { RadarDigital } from "./components/RadarDigital";
 import { ComercialDash } from "./components/ComercialDash";
@@ -118,6 +119,9 @@ export default function App() {
   // Navigation & View Mode
   const [activeTab, setActiveTab] = useState<"inicio" | "pesquisa" | "leads" | "oportunidades" | "ai_gerador" | "admin" | "crm" | "radar" | "comercial" | "loja_creditos" | "financeiro" | "dashboard-owner">("inicio");
 
+  // Routing/Viewing state for unauthenticated users
+  const [unauthView, setUnauthView] = useState<"landing" | "login" | "register">("landing");
+
   // Sidebar tab active style mapping
   const getSidebarBtnClass = (tabName: string) => {
     const isActive = activeTab === tabName;
@@ -137,7 +141,10 @@ export default function App() {
     const handleLocationRouting = () => {
       const pName = window.location.pathname;
       if (pName === "/owner" || pName === "/admin" || pName === "/dashboard-owner") {
-        if (!session) return; // Wait for AuthGate login first
+        if (!session) {
+          setUnauthView("login");
+          return; // Wait for AuthGate login first
+        }
         if (session.email?.toLowerCase() === "douglasbateriacma@gmail.com") {
           setActiveTab("dashboard-owner");
           triggerNotification("Redirecionado para o Painel de Controle Master com sucesso!", "success");
@@ -146,9 +153,20 @@ export default function App() {
           setActiveTab("inicio");
           window.history.replaceState({}, "", "/");
         }
+      } else if (pName === "/register") {
+        setUnauthView("register");
+      } else if (pName === "/login") {
+        setUnauthView("login");
+      } else {
+        setUnauthView("landing");
       }
     };
     handleLocationRouting();
+
+    window.addEventListener("popstate", handleLocationRouting);
+    return () => {
+      window.removeEventListener("popstate", handleLocationRouting);
+    };
   }, [session]);
   
   // Real-time State Lists
@@ -748,20 +766,50 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
 
   if (!session) {
     return (
-      <div id="auth-container" className="min-h-screen bg-slate-950">
-        <AuthGate 
-          onSignIn={(sess) => {
-            setSession(sess);
-            setManagerName(sess.name);
-            setCredits(sess.credits);
-            setManagerRole(sess.role);
-            setManagerEmail(sess.email);
-            triggerNotification(`Seja bem-vindo de volta, ${sess.name}! Perfil [${sess.role}] ativo com sucesso.`, "success");
-            setActiveTab("inicio");
-          }} 
-        />
-        {/* Toast Notification Container for Auth screen */}
-        <div id="toast-container" className="fixed top-6 right-6 z-[110] flex flex-col gap-2 pointer-events-none max-w-sm w-full">
+      <div id="auth-container" className="min-h-screen bg-slate-950 relative">
+        {unauthView === "landing" ? (
+          <LandingPage 
+            onNavigateToAuth={(step) => {
+              setUnauthView(step);
+              window.history.pushState({}, "", `/${step}`);
+            }}
+            onExploreDemo={() => {
+              setUnauthView("register");
+              window.history.pushState({}, "", "/register");
+              triggerNotification("Dando as boas-vindas com 10 Créditos de Leads Grátis!", "success");
+            }}
+          />
+        ) : (
+          <AuthGate 
+            initialStep={unauthView === "register" ? "register" : "login"}
+            onBackToLanding={() => {
+              setUnauthView("landing");
+              window.history.pushState({}, "", "/");
+            }}
+            onSignIn={(sess) => {
+              setSession(sess);
+              setManagerName(sess.name);
+              setCredits(sess.credits);
+              setManagerRole(sess.role);
+              setManagerEmail(sess.email);
+              triggerNotification(`Seja bem-vindo de volta, ${sess.name}! Perfil [${sess.role}] ativo com sucesso.`, "success");
+              
+              const currentPath = window.location.pathname;
+              if (currentPath === "/owner" || currentPath === "/admin" || currentPath === "/dashboard-owner") {
+                if (sess.email?.toLowerCase() === "douglasbateriacma@gmail.com") {
+                  setActiveTab("dashboard-owner");
+                } else {
+                  setActiveTab("inicio");
+                  window.history.replaceState({}, "", "/");
+                }
+              } else {
+                setActiveTab("inicio");
+              }
+            }} 
+          />
+        )}
+        {/* Toast Notification Container for Auth/Landing screen */}
+        <div id="toast-container" className="fixed top-6 right-6 z-[200] flex flex-col gap-2 pointer-events-none max-w-sm w-full">
           {notifications.map(n => (
             <div
               key={n.id}

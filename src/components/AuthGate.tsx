@@ -39,11 +39,17 @@ import { motion, AnimatePresence } from 'motion/react';
 
 interface AuthGateProps {
   onSignIn: (session: UserSession) => void;
+  initialStep?: 'login' | 'register' | 'recovery' | 'onboarding';
+  onBackToLanding?: () => void;
 }
 
-export const AuthGate: React.FC<AuthGateProps> = ({ onSignIn }) => {
+export const AuthGate: React.FC<AuthGateProps> = ({ 
+  onSignIn,
+  initialStep = 'login',
+  onBackToLanding
+}) => {
   // Navigation states: 'login' | 'register' | 'recovery' | 'onboarding'
-  const [currentStep, setCurrentStep] = useState<'login' | 'register' | 'recovery' | 'onboarding'>('login');
+  const [currentStep, setCurrentStep] = useState<'login' | 'register' | 'recovery' | 'onboarding'>(initialStep);
   
   // Onboarding stream sub-steps: 1 (Segment) | 2 (Objective) | 3 (Congratulations)
   const [onboardingSubStep, setOnboardingSubStep] = useState<1 | 2 | 3>(1);
@@ -358,6 +364,18 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onSignIn }) => {
       
       {/* Absolute top navbar tools */}
       <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
+        {onBackToLanding && (
+          <button
+            onClick={onBackToLanding}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all border cursor-pointer ${
+              themeMode === 'light'
+                ? 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm'
+                : 'bg-[#1C1C26] border-[#2B2B3A] text-white hover:bg-[#2B2B3A] shadow-glow-purple'
+            }`}
+          >
+            ← Voltar para o Site
+          </button>
+        )}
         <button
           onClick={toggleTheme}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all border cursor-pointer ${

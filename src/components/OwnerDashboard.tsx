@@ -507,16 +507,26 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ session, trigger
   });
 
   // Calculate Metrics
-  const totalUsers = dbUsers.length;
-  const activeUsers = dbUsers.filter(u => u.accountStatus === "ACTIVE").length;
+  const adminEmailFilter = "douglasbateriacma@gmail.com";
+  
+  // Clean datasets that exclude the administrator to avoid warping business stats
+  const filteredMetricsUsers = dbUsers.filter(u => u.email?.toLowerCase() !== adminEmailFilter);
+  const adminUserIds = dbUsers
+    .filter(u => u.email?.toLowerCase() === adminEmailFilter)
+    .map(u => u.id);
+  const filteredMetricsPayments = dbPayments.filter(p => !adminUserIds.includes(p.userId));
+  const filteredMetricsSubscriptions = dbSubscriptions.filter(s => !adminUserIds.includes(s.userId));
+
+  const totalUsers = filteredMetricsUsers.length;
+  const activeUsers = filteredMetricsUsers.filter(u => u.accountStatus === "ACTIVE").length;
   const limitedUsers = totalUsers - activeUsers;
-  const paidUsers = dbUsers.filter(u => (u.plan || '').toLowerCase() !== "gratuito" && (u.plan || '').toLowerCase() !== "free").length;
+  const paidUsers = filteredMetricsUsers.filter(u => (u.plan || '').toLowerCase() !== "gratuito" && (u.plan || '').toLowerCase() !== "free").length;
   const freeUsers = totalUsers - paidUsers;
 
   const conversionRate = totalUsers > 0 ? (paidUsers / totalUsers) * 100 : 0;
   
   // Calculate MRR (Monthly Recurring Revenue) with dynamic plan mapping + fallbacks
-  const mrr = dbUsers.reduce((m, u) => {
+  const mrr = filteredMetricsUsers.reduce((m, u) => {
     if (u.accountStatus !== "ACTIVE") return m;
     const planName = (u.plan || '').toLowerCase();
     const matchedPlan = dbPlans.find(p => (p.name || '').toLowerCase() === planName);
@@ -532,25 +542,25 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ session, trigger
   }, 0);
 
   const arr = mrr * 12;
-  const creditsSold = dbUsers.reduce((acc, u) => acc + (u.credits || 0), 0);
+  const creditsSold = filteredMetricsUsers.reduce((acc, u) => acc + (u.credits || 0), 0);
   const ticketMedio = paidUsers > 0 ? mrr / paidUsers : 0;
   
   // Real-time Churn calculation from subscriptions table vs simulated
-  const totalSubscribed = dbSubscriptions.length;
-  const canceledSubscribed = dbSubscriptions.filter(s => s.status === 'CANCELED').length;
+  const totalSubscribed = filteredMetricsSubscriptions.length;
+  const canceledSubscribed = filteredMetricsSubscriptions.filter(s => s.status === 'CANCELED').length;
   const churnRate = totalSubscribed > 0 ? Number(((canceledSubscribed / totalSubscribed) * 100).toFixed(1)) : 1.8;
   
   const ltvEstimado = churnRate > 0 ? ticketMedio / (churnRate / 100) : 0;
 
   // Real-time Receita Total from payments list
-  const receitaTotal = dbPayments
+  const receitaTotal = filteredMetricsPayments
     .filter(p => p.status === "RECEIVED" || p.status === "CONFIRMED")
     .reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
 
   // Real-time Receita Mensal from last 30 days payments list
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const receitaMensal = dbPayments
+  const receitaMensal = filteredMetricsPayments
     .filter(p => {
       const isConfirmed = p.status === "RECEIVED" || p.status === "CONFIRMED";
       const payDate = p.date ? new Date(p.date) : null;
