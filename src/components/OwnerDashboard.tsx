@@ -531,6 +531,16 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ session, trigger
   const churnRate = 1.8; // Simulated Churn base
   const ltvEstimado = churnRate > 0 ? ticketMedio / (churnRate / 100) : 0;
 
+  if (!session || session.email?.toLowerCase() !== "douglasbateriacma@gmail.com") {
+    return (
+      <div id="access-denied" className="bg-slate-900 text-red-450 p-8 rounded-2xl text-center font-bold border border-red-500/30 max-w-xl mx-auto space-y-4 my-20">
+        <ShieldAlert className="w-12 h-12 text-red-500 mx-auto animate-bounce" />
+        <h3 className="text-xl uppercase tracking-wider text-red-500 font-extrabold">Acesso Negado (Access Denied)</h3>
+        <p className="text-sm font-medium text-slate-300">Esta área oculta é de uso restrito ao administrador proprietário (Owner).</p>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-slate-900 border border-slate-800 text-white p-6 rounded-3xl space-y-6 shadow-2xl relative font-sans leading-relaxed">
       

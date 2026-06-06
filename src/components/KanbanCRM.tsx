@@ -10,9 +10,11 @@ import {
 interface KanbanCRMProps {
   leads: Lead[];
   setLeads: React.Dispatch<React.SetStateAction<Lead[]>>;
-  onOpenDetails: (lead: Lead) => void;
-  triggerNotification: (msg: string, type: 'success' | 'error' | 'info') => void;
-  userRole: string;
+  onOpenDetails?: (lead: Lead) => void;
+  triggerNotification: (msg: string, type: 'success' | 'error' | 'info' | 'warning') => void;
+  userRole?: string;
+  currentUserRole?: string;
+  isReadOnly?: boolean;
 }
 
 const STAGES: { key: Lead['status']; label: string; bg: string; text: string; border: string }[] = [
@@ -31,7 +33,9 @@ export const KanbanCRM: React.FC<KanbanCRMProps> = ({
   setLeads, 
   onOpenDetails, 
   triggerNotification,
-  userRole 
+  userRole,
+  currentUserRole,
+  isReadOnly = false
 }) => {
   const [selectedLeadForPanel, setSelectedLeadForPanel] = useState<Lead | null>(null);
   const [newNote, setNewNote] = useState('');
@@ -40,6 +44,10 @@ export const KanbanCRM: React.FC<KanbanCRMProps> = ({
   const [taskCategory, setTaskCategory] = useState<'ligacao' | 'email' | 'proposta' | 'reuniao'>('ligacao');
 
   const moveLead = (leadId: string, direction: 'prev' | 'next') => {
+    if (isReadOnly) {
+      triggerNotification('CRM em Modo Somente Leitura devido à inadimplência. Regularize o faturamento na aba Financeiro.', 'error');
+      return;
+    }
     const lead = leads.find(l => l.id === leadId);
     if (!lead) return;
 
@@ -53,6 +61,10 @@ export const KanbanCRM: React.FC<KanbanCRMProps> = ({
   };
 
   const updateLeadStatus = (leadId: string, status: Lead['status']) => {
+    if (isReadOnly) {
+      triggerNotification('CRM em Modo Somente Leitura devido à inadimplência. Regularize o faturamento na aba Financeiro.', 'error');
+      return;
+    }
     setLeads(prev => prev.map(l => {
       if (l.id === leadId) {
         const item: TimelineItem = {
@@ -72,6 +84,10 @@ export const KanbanCRM: React.FC<KanbanCRMProps> = ({
 
   const handleAddNote = (e: React.FormEvent, leadId: string) => {
     e.preventDefault();
+    if (isReadOnly) {
+      triggerNotification('CRM em Modo Somente Leitura devido à inadimplência. Regularize o faturamento na aba Financeiro.', 'error');
+      return;
+    }
     if (!newNote.trim()) return;
 
     setLeads(prev => prev.map(l => {
@@ -125,6 +141,10 @@ export const KanbanCRM: React.FC<KanbanCRMProps> = ({
 
   const handleAddTask = (e: React.FormEvent, leadId: string) => {
     e.preventDefault();
+    if (isReadOnly) {
+      triggerNotification('CRM em Modo Somente Leitura devido à inadimplência. Regularize o faturamento na aba Financeiro.', 'error');
+      return;
+    }
     if (!taskTitle.trim() || !taskDueDate) {
       triggerNotification('Preencha título e data de entrega para criar a tarefa.', 'error');
       return;
@@ -181,6 +201,10 @@ export const KanbanCRM: React.FC<KanbanCRMProps> = ({
   };
 
   const toggleTaskStatus = (leadId: string, taskId: string) => {
+    if (isReadOnly) {
+      triggerNotification('CRM em Modo Somente Leitura devido à inadimplência. Regularize o faturamento na aba Financeiro.', 'error');
+      return;
+    }
     setLeads(prev => prev.map(l => {
       if (l.id === leadId && l.tasks) {
         const updatedTasks = l.tasks.map(t => {

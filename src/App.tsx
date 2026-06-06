@@ -52,6 +52,7 @@ import { ComercialDash } from "./components/ComercialDash";
 import { CopilotoIA } from "./components/CopilotoIA";
 import { DocumentGenerator } from "./components/DocumentGenerator";
 import { LojaCreditos } from "./components/LojaCreditos";
+import { Financeiro } from "./components/Financeiro";
 import { AdminCredits } from "./components/AdminCredits";
 import { OwnerDashboard } from "./components/OwnerDashboard";
 import { collection, getDocs, setDoc, deleteDoc, doc, onSnapshot, getDoc } from "firebase/firestore";
@@ -115,7 +116,7 @@ export default function App() {
   };
 
   // Navigation & View Mode
-  const [activeTab, setActiveTab] = useState<"inicio" | "pesquisa" | "leads" | "oportunidades" | "ai_gerador" | "admin" | "crm" | "radar" | "comercial" | "loja_creditos" | "dashboard-owner">("inicio");
+  const [activeTab, setActiveTab] = useState<"inicio" | "pesquisa" | "leads" | "oportunidades" | "ai_gerador" | "admin" | "crm" | "radar" | "comercial" | "loja_creditos" | "financeiro" | "dashboard-owner">("inicio");
 
   // Sidebar tab active style mapping
   const getSidebarBtnClass = (tabName: string) => {
@@ -483,8 +484,8 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
     if (e) e.preventDefault();
     
     // Check SaaS subscriptional status guard
-    if (session?.subscriptionStatus === 'PENDING' || session?.subscriptionStatus === 'OVERDUE') {
-      triggerNotification("Seu plano está suspenso devido a faturamento pendente no Asaas. Acesse a aba Assinaturas para regularizar seu acesso.", "warning");
+    if (session?.subscriptionStatus === 'PENDING' || session?.subscriptionStatus === 'OVERDUE' || session?.subscriptionStatus === 'PAST_DUE' || session?.subscriptionStatus === 'CANCELED') {
+      triggerNotification("Sua assinatura está suspensa ou em atraso. Regularize seu faturamento na aba Financeiro para continuar utilizando a plataforma.", "warning");
       return;
     }
 
@@ -589,8 +590,8 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
   // Generate Approach pitching with Gemini
   const handleGenerateAICopyMessage = async () => {
     // Check SaaS subscriptional status guard
-    if (session?.subscriptionStatus === 'PENDING' || session?.subscriptionStatus === 'OVERDUE') {
-      triggerNotification("Seu plano está suspenso devido a faturamento pendente no Asaas. Acesse a aba Assinaturas para regularizar seu acesso.", "warning");
+    if (session?.subscriptionStatus === 'PENDING' || session?.subscriptionStatus === 'OVERDUE' || session?.subscriptionStatus === 'PAST_DUE' || session?.subscriptionStatus === 'CANCELED') {
+      triggerNotification("Sua assinatura está suspensa ou em atraso. Regularize seu faturamento na aba Financeiro para continuar utilizando a plataforma.", "warning");
       return;
     }
 
@@ -956,15 +957,12 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
             </button>
 
             <button 
-              id="sidebar-tab-loja-creditos"
-              onClick={() => setActiveTab("loja_creditos")} 
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-bold text-sm transition-all text-left ${getSidebarBtnClass("loja_creditos")}`}
+              id="sidebar-tab-financeiro"
+              onClick={() => setActiveTab("financeiro")} 
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-bold text-sm transition-all text-left ${getSidebarBtnClass("financeiro")}`}
             >
-              <Coins className={`w-5 h-5 shrink-0 ${themeMode === 'light' ? 'text-amber-600' : 'text-amber-400'} animate-pulse`} />
-              <span className="flex items-center gap-1.5">
-                <span>Comprar Créditos</span>
-                <span className="bg-amber-100 text-amber-800 text-[8px] px-1.5 py-0.5 rounded font-black uppercase">Promo</span>
-              </span>
+              <Coins className={`w-5 h-5 shrink-0 ${themeMode === 'light' ? 'text-indigo-600' : 'text-indigo-400'}`} />
+              <span>Financeiro</span>
             </button>
 
             <button 
@@ -1005,6 +1003,26 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
 
         {/* Primary Screen Area depending on activeTab context */}
         <main id="main-content-canvas" className="flex-1 lg:ml-[280px] p-4 md:p-8 pb-24 lg:pb-8 transition-all max-w-7xl mx-auto w-full">
+          
+          {session?.subscriptionStatus === "PAST_DUE" && activeTab !== "financeiro" && activeTab !== "loja_creditos" && (
+            <div id="past-due-notification-banner" className="bg-red-600 border border-red-500 text-white p-5 rounded-2xl flex items-center justify-between gap-4 shadow-lg mb-6 text-left">
+              <div className="flex items-center gap-3">
+                <ShieldAlert className="w-6 h-6 text-white shrink-0 animate-bounce" />
+                <div>
+                  <strong className="text-sm uppercase tracking-wide font-black block">Faturamento em Atraso</strong>
+                  <span className="text-xs text-red-100 font-medium">
+                    Sua assinatura está em atraso. Regularize seu pagamento para continuar utilizando a plataforma.
+                  </span>
+                </div>
+              </div>
+              <button 
+                onClick={() => setActiveTab("financeiro")}
+                className="bg-white text-red-650 font-black text-xs px-4 py-2 rounded-xl border-none hover:bg-red-50 transition-all shadow-sm shrink-0"
+              >
+                Regularizar Conta
+              </button>
+            </div>
+          )}
           
           {/* TAB 1: VISÃO GERAL */}
           {activeTab === "inicio" && (
@@ -2592,6 +2610,8 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
                 leads={leads} 
                 setLeads={setLeads} 
                 currentUserRole={session?.role as any} 
+                userRole={session?.role}
+                isReadOnly={session?.subscriptionStatus === "PAST_DUE"}
                 triggerNotification={triggerNotification} 
               />
             </div>
@@ -2631,18 +2651,14 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
             </div>
           )}
 
-          {/* TAB: LOJA DE CRÉDITOS AVULSOS */}
-          {activeTab === "loja_creditos" && (
-            <div id="tab-loja-creditos-view" className="space-y-6 animate-in fade-in duration-300">
-              <div>
-                <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Loja de Créditos</h2>
-                <p className="text-slate-500 mt-1">Reabasteça seus créditos para continuar decolando sua prospecção de leads e análises inteligentes.</p>
-              </div>
-              <LojaCreditos 
-                userId={session?.id || ''}
-                triggerNotification={triggerNotification}
-              />
-            </div>
+          {/* TAB: FINANCEIRO DO CLIENTE */}
+          {(activeTab === "financeiro" || activeTab === "loja_creditos") && (
+            <Financeiro 
+              session={session}
+              triggerNotification={triggerNotification}
+              setActiveTab={setActiveTab}
+              themeMode={themeMode}
+            />
           )}
 
         </main>
