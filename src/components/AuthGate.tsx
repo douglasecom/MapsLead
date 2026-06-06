@@ -18,7 +18,7 @@ interface AuthGateProps {
 export const AuthGate: React.FC<AuthGateProps> = ({ onSignIn }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('douglasbateriacma@gmail.com');
-  const [password, setPassword] = useState('123456');
+  const [password, setPassword] = useState('88456869Wd!');
   const [name, setName] = useState('Douglas CMA');
   const [role, setRole] = useState<'Administrador' | 'Gestor' | 'SDR' | 'Closer' | 'Operador'>('Gestor');
   const [plan, setPlan] = useState<'Gratuito' | 'Starter' | 'Pro' | 'Agência'>('Gratuito');
@@ -456,7 +456,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onSignIn }) => {
                 {/* Login suggestions details */}
                 {isLogin && email === 'douglasbateriacma@gmail.com' && (
                   <div className="bg-blue-500/5 border border-blue-500/10 p-3.5 rounded-2xl text-[11px] text-blue-400 leading-normal font-semibold">
-                    💡 <strong className="text-white">Acesso de Demonstração:</strong> Use as credenciais pré-preenchidas para entrar como <strong>Douglas CMA (Gestor)</strong> com créditos premium liberados.
+                    💡 <strong className="text-white">Acesso do Desenvolvedor:</strong> Use as credenciais pré-preenchidas para entrar como <strong>Douglas CMA</strong> com privilégios de **Acesso Vitalício Ilimitado**.
                   </div>
                 )}
 
