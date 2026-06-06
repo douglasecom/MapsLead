@@ -4,7 +4,9 @@ import { ShieldCheck, User, Mail, Lock, Sparkles, KeyRound } from 'lucide-react'
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
-  sendPasswordResetEmail 
+  sendPasswordResetEmail,
+  GoogleAuthProvider,
+  signInWithPopup
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
@@ -25,6 +27,63 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onSignIn }) => {
   const [recoverySuccess, setRecoverySuccess] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true);
+    setErrorMsg('');
+    try {
+      const provider = new GoogleAuthProvider();
+      const userCredential = await signInWithPopup(auth, provider);
+      const user = userCredential.user;
+
+      // Fetch User Profile Document in Firestore
+      const userRef = doc(db, 'users', user.uid);
+      const userSnap = await getDoc(userRef);
+
+      let userSession: UserSession;
+
+      if (userSnap.exists()) {
+        const profileData = userSnap.data();
+        const isDeveloper = (user.email || profileData.email || '').toLowerCase() === 'douglasbateriacma@gmail.com';
+        userSession = {
+          id: user.uid,
+          name: profileData.name || user.displayName || 'Membro da Equipe',
+          email: user.email || profileData.email || '',
+          role: isDeveloper ? 'Administrador' : (profileData.role || 'Gestor'),
+          avatarUrl: profileData.avatarUrl || user.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
+          plan: isDeveloper ? 'Unlimited' : (profileData.plan || 'Pro'),
+          credits: isDeveloper ? 999999 : (profileData.credits !== undefined ? profileData.credits : 1000),
+          subscriptionStatus: profileData.subscriptionStatus || 'ACTIVE'
+        };
+      } else {
+        const isDeveloper = (user.email || '').toLowerCase() === 'douglasbateriacma@gmail.com';
+        // Create profile if it does not exist
+        userSession = {
+          id: user.uid,
+          name: isDeveloper ? 'Douglas CMA' : (user.displayName || 'Membro da Equipe'),
+          email: user.email || '',
+          role: isDeveloper ? 'Administrador' : 'Gestor',
+          avatarUrl: user.photoURL || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
+          plan: isDeveloper ? 'Unlimited' : 'Pro',
+          credits: isDeveloper ? 999999 : 1000,
+          subscriptionStatus: 'ACTIVE',
+          planCredits: isDeveloper ? 999999 : 1000,
+          purchasedCredits: 0,
+          bonusCredits: 0,
+          remainingCredits: isDeveloper ? 999999 : 1000,
+          accountStatus: 'ACTIVE'
+        };
+        await setDoc(userRef, userSession);
+      }
+
+      onSignIn(userSession);
+    } catch (err: any) {
+      console.error('Google Auth error:', err);
+      setErrorMsg(err?.message || 'Ocorreu um erro ao autenticar com o Google.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,6 +111,7 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onSignIn }) => {
         const userSnap = await getDoc(userRef);
 
         let userSession: UserSession;
+        const isDeveloper = email.toLowerCase() === 'douglasbateriacma@gmail.com';
 
         if (userSnap.exists()) {
           const profileData = userSnap.data();
@@ -59,22 +119,22 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onSignIn }) => {
             id: user.uid,
             name: profileData.name || 'Membro da Equipe',
             email: user.email || email,
-            role: profileData.role || 'SDR',
+            role: isDeveloper ? 'Administrador' : (profileData.role || 'SDR'),
             avatarUrl: profileData.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
-            plan: profileData.plan || 'Pro',
-            credits: profileData.credits !== undefined ? profileData.credits : 1000,
+            plan: isDeveloper ? 'Unlimited' : (profileData.plan || 'Pro'),
+            credits: isDeveloper ? 999999 : (profileData.credits !== undefined ? profileData.credits : 1000),
             subscriptionStatus: profileData.subscriptionStatus || 'ACTIVE'
           };
         } else {
           // If profile document does not exist yet (e.g. legacy/manually created users)
           userSession = {
             id: user.uid,
-            name: email === 'douglasbateriacma@gmail.com' ? 'Douglas CMA' : 'Membro da Equipe',
+            name: isDeveloper ? 'Douglas CMA' : 'Membro da Equipe',
             email: user.email || email,
-            role: email === 'douglasbateriacma@gmail.com' ? 'Gestor' : 'SDR',
+            role: isDeveloper ? 'Administrador' : 'SDR',
             avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
-            plan: email === 'douglasbateriacma@gmail.com' ? 'Agência' : 'Pro',
-            credits: 2000,
+            plan: isDeveloper ? 'Unlimited' : 'Pro',
+            credits: isDeveloper ? 999999 : 2000,
             subscriptionStatus: 'ACTIVE'
           };
           // Save document synchronously
@@ -86,26 +146,29 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onSignIn }) => {
         // Real Sign Up / Registration
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
+        const isDeveloper = email.toLowerCase() === 'douglasbateriacma@gmail.com';
 
         // Role-dependent static credits allotment
-        let credits = 10;
-        if (plan === 'Starter') credits = 100;
-        if (plan === 'Pro') credits = 500;
-        if (plan === 'Agência') credits = 2000;
+        let creditsToAllot = isDeveloper ? 999999 : 10;
+        if (!isDeveloper) {
+          if (plan === 'Starter') creditsToAllot = 100;
+          if (plan === 'Pro') creditsToAllot = 500;
+          if (plan === 'Agência') creditsToAllot = 2000;
+        }
 
         const newSession: UserSession = {
           id: user.uid,
-          name: name,
+          name: isDeveloper ? 'Douglas CMA' : name,
           email: user.email || email,
-          role: role,
+          role: isDeveloper ? 'Administrador' : role,
           avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
-          plan: plan,
-          credits: credits,
+          plan: isDeveloper ? 'Unlimited' : plan,
+          credits: creditsToAllot,
           subscriptionStatus: 'ACTIVE',
-          planCredits: credits,
+          planCredits: creditsToAllot,
           purchasedCredits: 0,
           bonusCredits: 0,
-          remainingCredits: credits,
+          remainingCredits: creditsToAllot,
           accountStatus: 'ACTIVE'
         };
 
@@ -274,8 +337,19 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onSignIn }) => {
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 {errorMsg && (
-                  <div className="bg-rose-500/10 border border-rose-500/25 text-rose-400 p-3 rounded-xl text-xs font-bold">
-                    {errorMsg}
+                  <div className="bg-rose-500/10 border border-rose-500/25 text-rose-400 p-4 rounded-xl text-xs font-bold space-y-2 text-left">
+                    <p>{errorMsg}</p>
+                    {errorMsg.toLowerCase().includes('operation-not-allowed') && (
+                      <div className="text-[11px] leading-relaxed text-slate-300 font-semibold border-t border-rose-500/20 pt-2.5 mt-2 space-y-1.5 font-sans">
+                        <p className="text-amber-400 font-bold">💡 Como resolver no Firebase Console:</p>
+                        <p>O login por <strong>E-mail/Senha</strong> não está ativo na sua conta Firebase.</p>
+                        <ol className="list-decimal pl-4 space-y-1 text-slate-300">
+                          <li>Abra o <a href="https://console.firebase.google.com/project/ai-studio-07fa01e6-d6a1-4d4e-b05a-262a2373f3d7/authentication/providers" target="_blank" rel="noopener noreferrer" className="underline text-blue-400 hover:text-blue-300">Console Firebase</a></li>
+                          <li>Vá em <strong>Authentication</strong> e selecione a aba <strong>Sign-in method</strong></li>
+                          <li>Clique em <strong>Adicionar novo provedor</strong>, escolha <strong>E-mail/Senha</strong>, ative e clique em <strong>Salvar</strong>.</li>
+                        </ol>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -395,6 +469,30 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onSignIn }) => {
                 </button>
 
               </form>
+
+              {/* Instant Social Authentication Separator and Google Button */}
+              <div className="space-y-4 pt-1">
+                <div className="relative flex py-1 items-center">
+                  <div className="flex-grow border-t border-slate-800/80"></div>
+                  <span className="flex-shrink mx-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-[#64748b]">Ou acesse imediatamente</span>
+                  <div className="flex-grow border-t border-slate-800/80"></div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleGoogleSignIn}
+                  disabled={isLoading}
+                  className="w-full bg-[#1e293b]/40 hover:bg-[#1e293b]/80 border border-slate-800/85 text-white font-extrabold py-3.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2.5 transition-all cursor-pointer select-none"
+                >
+                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22c-.87-2.6-2.5-4.53-4.19-4.53z" fill="#FBBC05" />
+                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335" />
+                  </svg>
+                  <span>Acessar com E-mail Google</span>
+                </button>
+              </div>
 
             </div>
           )}

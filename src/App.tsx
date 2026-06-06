@@ -88,6 +88,9 @@ export default function App() {
 
   // Premium feature validator for the FREE/Gratuito plan users
   const isFeaturePremiumRestricted = (featureName: string): boolean => {
+    if (session?.email?.toLowerCase() === 'douglasbateriacma@gmail.com') {
+      return false; // Unlimited Developer bypass
+    }
     const planName = session?.plan || 'Gratuito';
     const isFree = planName.toLowerCase() === 'gratuito' || planName.toLowerCase() === 'free';
     if (isFree) {
@@ -105,6 +108,11 @@ export default function App() {
       return false;
     }
 
+    if (session.email?.toLowerCase() === 'douglasbateriacma@gmail.com') {
+      // Developer bypass: no credit verification or subtraction
+      return true;
+    }
+
     // Load fresh data first to prevent race updates
     const userRef = doc(db, "users", session.id);
     const userSnap = await getDoc(userRef);
@@ -114,6 +122,9 @@ export default function App() {
     }
 
     const userData = userSnap.data();
+    if (userData.email?.toLowerCase() === 'douglasbateriacma@gmail.com') {
+      return true;
+    }
     let pCredits = userData.planCredits !== undefined ? userData.planCredits : (userData.credits || 0);
     let purCredits = userData.purchasedCredits || 0;
     let bCredits = userData.bonusCredits || 0;
@@ -668,25 +679,27 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
             <div className="flex flex-col">
               <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Plano Atual</span>
               <span className="text-xs font-black text-slate-800 flex items-center gap-1">
-                <span className={`w-2 h-2 rounded-full ${(session?.plan || 'Gratuito').toLowerCase() === 'gratuito' ? 'bg-zinc-400' : 'bg-emerald-500 animate-pulse'}`}></span>
-                {session?.plan || 'Gratuito'}
+                <span className={`w-2 h-2 rounded-full ${session?.email?.toLowerCase() === 'douglasbateriacma@gmail.com' ? 'bg-amber-400 animate-pulse' : (session?.plan || 'Gratuito').toLowerCase() === 'gratuito' ? 'bg-zinc-400' : 'bg-emerald-500 animate-pulse'}`}></span>
+                {session?.email?.toLowerCase() === 'douglasbateriacma@gmail.com' ? 'Unlimited Vitalício (Dev)' : (session?.plan || 'Gratuito')}
               </span>
             </div>
             
             <div className="flex flex-col">
               <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Leads Restantes</span>
               <span className="text-xs font-black text-slate-800">
-                {(session?.plan || 'Gratuito').toLowerCase() === 'gratuito'
-                  ? `${session?.planCredits !== undefined ? session.planCredits : 10} de 10`
-                  : `${session?.planCredits !== undefined ? session.planCredits : 500} de 500`
-                } restantes
+                {session?.email?.toLowerCase() === 'douglasbateriacma@gmail.com' 
+                  ? '∞ Ilimitado'
+                  : (session?.plan || 'Gratuito').toLowerCase() === 'gratuito'
+                    ? `${session?.planCredits !== undefined ? session.planCredits : 10} de 10 restantes`
+                    : `${session?.planCredits !== undefined ? session.planCredits : 500} de 500 restantes`
+                }
               </span>
             </div>
 
             <div className="flex flex-col font-mono text-xs">
               <span className="text-[10px] text-slate-400 font-sans font-bold uppercase tracking-wider">Créditos Comprados</span>
               <span className="text-xs font-black text-blue-700">
-                +{session?.purchasedCredits || 0} adicionais
+                {session?.email?.toLowerCase() === 'douglasbateriacma@gmail.com' ? '∞ Privilégio Dev' : `+${session?.purchasedCredits || 0} adicionais`}
               </span>
             </div>
           </div>
@@ -695,7 +708,9 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
             {/* Credits badge selector */}
             <div id="hdr-credits" className="hidden sm:flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-full px-4 py-1">
               <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
-              <span className="text-xs font-semibold text-blue-800">{credits} créditos de prospecção</span>
+              <span className="text-xs font-semibold text-blue-800">
+                {session?.email?.toLowerCase() === 'douglasbateriacma@gmail.com' ? 'Créditos Ilimitados' : `${credits} créditos de prospecção`}
+              </span>
             </div>
 
             <div className="flex items-center gap-3 border-l pl-4 border-slate-200">
