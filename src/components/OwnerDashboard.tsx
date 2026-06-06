@@ -389,7 +389,7 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ session, trigger
       ]);
 
       // If user is set, we can simulate updating their database plan/credits
-      const targetUser = dbUsers.find(u => u.email.toLowerCase() === simWebhookEmail.toLowerCase());
+      const targetUser = dbUsers.find(u => (u.email || '').toLowerCase() === (simWebhookEmail || '').toLowerCase());
       if (targetUser) {
         const userRef = doc(db, "users", targetUser.id);
         const addedCredits = simWebhookPlane === "pro" ? 500 : simWebhookPlane === "agency" ? 2000 : 100;
@@ -492,16 +492,16 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ session, trigger
 
   // Filtered lists calculated Client Side
   const filteredUsersList = dbUsers.filter(u => {
-    const matchesSearch = u.name.toLowerCase().includes(userSearch.toLowerCase()) || 
-                          u.email.toLowerCase().includes(userSearch.toLowerCase());
+    const matchesSearch = (u.name || '').toLowerCase().includes((userSearch || '').toLowerCase()) || 
+                          (u.email || '').toLowerCase().includes((userSearch || '').toLowerCase());
     const matchesRole = userFilterRole === "all" || u.role === userFilterRole;
-    const matchesPlan = userFilterPlan === "all" || u.plan.toLowerCase() === userFilterPlan.toLowerCase();
+    const matchesPlan = userFilterPlan === "all" || (u.plan || '').toLowerCase() === (userFilterPlan || '').toLowerCase();
     return matchesSearch && matchesRole && matchesPlan;
   });
 
   const filteredLogsList = dbActivityLogs.filter(l => {
-    const matchesSearch = l.details.toLowerCase().includes(logSearch.toLowerCase()) || 
-                          l.userName.toLowerCase().includes(logSearch.toLowerCase());
+    const matchesSearch = (l.details || '').toLowerCase().includes((logSearch || '').toLowerCase()) || 
+                          (l.userName || '').toLowerCase().includes((logSearch || '').toLowerCase());
     const matchesAction = logFilterAction === "all" || l.action === logFilterAction;
     return matchesSearch && matchesAction;
   });
@@ -510,26 +510,53 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ session, trigger
   const totalUsers = dbUsers.length;
   const activeUsers = dbUsers.filter(u => u.accountStatus === "ACTIVE").length;
   const limitedUsers = totalUsers - activeUsers;
-  const paidUsers = dbUsers.filter(u => u.plan.toLowerCase() !== "gratuito" && u.plan.toLowerCase() !== "free").length;
+  const paidUsers = dbUsers.filter(u => (u.plan || '').toLowerCase() !== "gratuito" && (u.plan || '').toLowerCase() !== "free").length;
   const freeUsers = totalUsers - paidUsers;
 
   const conversionRate = totalUsers > 0 ? (paidUsers / totalUsers) * 100 : 0;
   
-  // Calculate MRR (Monthly Recurring Revenue): Starter: R$49, Pro: R$97, Agency: R$197, Enterprise: R$497
+  // Calculate MRR (Monthly Recurring Revenue) with dynamic plan mapping + fallbacks
   const mrr = dbUsers.reduce((m, u) => {
-    const p = u.plan.toLowerCase();
-    if (p.includes("starter")) return m + 49;
-    if (p.includes("pro")) return m + 97;
-    if (p.includes("agên") || p.includes("agency")) return m + 197;
-    if (p.includes("enter") || p.includes("enterprise")) return m + 497;
+    if (u.accountStatus !== "ACTIVE") return m;
+    const planName = (u.plan || '').toLowerCase();
+    const matchedPlan = dbPlans.find(p => (p.name || '').toLowerCase() === planName);
+    if (matchedPlan) {
+      return m + (matchedPlan.price || 0);
+    }
+    // Fallbacks
+    if (planName.includes("starter")) return m + 49;
+    if (planName.includes("pro")) return m + 97;
+    if (planName.includes("agên") || planName.includes("agency")) return m + 197;
+    if (planName.includes("enter") || planName.includes("enterprise")) return m + 497;
     return m;
   }, 0);
 
   const arr = mrr * 12;
   const creditsSold = dbUsers.reduce((acc, u) => acc + (u.credits || 0), 0);
   const ticketMedio = paidUsers > 0 ? mrr / paidUsers : 0;
-  const churnRate = 1.8; // Simulated Churn base
+  
+  // Real-time Churn calculation from subscriptions table vs simulated
+  const totalSubscribed = dbSubscriptions.length;
+  const canceledSubscribed = dbSubscriptions.filter(s => s.status === 'CANCELED').length;
+  const churnRate = totalSubscribed > 0 ? Number(((canceledSubscribed / totalSubscribed) * 100).toFixed(1)) : 1.8;
+  
   const ltvEstimado = churnRate > 0 ? ticketMedio / (churnRate / 100) : 0;
+
+  // Real-time Receita Total from payments list
+  const receitaTotal = dbPayments
+    .filter(p => p.status === "RECEIVED" || p.status === "CONFIRMED")
+    .reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
+
+  // Real-time Receita Mensal from last 30 days payments list
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const receitaMensal = dbPayments
+    .filter(p => {
+      const isConfirmed = p.status === "RECEIVED" || p.status === "CONFIRMED";
+      const payDate = p.date ? new Date(p.date) : null;
+      return isConfirmed && payDate && payDate >= thirtyDaysAgo;
+    })
+    .reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
 
   if (!session || session.email?.toLowerCase() !== "douglasbateriacma@gmail.com") {
     return (
@@ -617,36 +644,52 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ session, trigger
         <div className="space-y-6 animate-in fade-in duration-200">
           
           {/* Bento grid numbers cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
             <div className="bg-slate-850 p-4 border border-slate-800 rounded-2xl relative space-y-1">
-              <span className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold block">Volume de Usuários</span>
-              <p className="text-3xl font-black tracking-tight">{totalUsers}</p>
-              <p className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1 font-mono">
-                Ativos {activeUsers} | Bloqueados {limitedUsers}
+              <span className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold block text-left">Faturamento (MRR)</span>
+              <p className="text-2xl font-black text-emerald-400 tracking-tight font-mono text-left">R$ {mrr.toFixed(2)}</p>
+              <p className="text-[10px] text-slate-400 font-semibold font-sans text-left">
+                Mensalidade recorrente
               </p>
             </div>
             
             <div className="bg-slate-850 p-4 border border-slate-800 rounded-2xl relative space-y-1">
-              <span className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold block">Faturamento (MRR)</span>
-              <p className="text-3xl font-black text-emerald-400 tracking-tight font-mono">R$ {mrr.toFixed(2)}</p>
-              <p className="text-[10px] text-slate-400 font-semibold font-sans">
-                ARR Anual Estimado: R$ {arr.toFixed(2)}
+              <span className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold block text-left">Faturamento (ARR)</span>
+              <p className="text-2xl font-black text-[#8B2EFF] tracking-tight font-mono text-left">R$ {arr.toFixed(2)}</p>
+              <p className="text-[10px] text-slate-400 font-semibold font-sans text-left">
+                Projeção anualizada (12x)
               </p>
             </div>
 
             <div className="bg-slate-850 p-4 border border-slate-800 rounded-2xl relative space-y-1">
-              <span className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold block">Clientes Free → Pago</span>
-              <p className="text-3xl font-black text-indigo-400 tracking-tight font-sans">{conversionRate.toFixed(1)}%</p>
-              <p className="text-[10px] text-slate-450 font-semibold">
-                Free: {freeUsers} | Pagantes: {paidUsers}
+              <span className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold block text-left">Churn Rate</span>
+              <p className="text-2xl font-black text-rose-450 tracking-tight font-mono text-left">{churnRate.toFixed(1)}%</p>
+              <p className="text-[10px] text-slate-400 font-semibold text-left">
+                SaaS cancelamentos
               </p>
             </div>
 
             <div className="bg-slate-850 p-4 border border-slate-800 rounded-2xl relative space-y-1">
-              <span className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold block">Estimativa LTV</span>
-              <p className="text-3xl font-black text-amber-400 tracking-tight font-mono">R$ {ltvEstimado.toFixed(2)}</p>
-              <p className="text-[10px] text-amber-500 font-semibold">
-                Churn Rate Mensal: {churnRate}%
+              <span className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold block text-left">Clientes Ativos</span>
+              <p className="text-2xl font-black text-indigo-400 tracking-tight font-sans text-left">{activeUsers}</p>
+              <p className="text-[10px] text-slate-400 font-semibold text-left">
+                Pagantes: {paidUsers} | Free: {freeUsers}
+              </p>
+            </div>
+
+            <div className="bg-slate-850 p-4 border border-slate-800 rounded-2xl relative space-y-1">
+              <span className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold block text-left">Receita Total</span>
+              <p className="text-2xl font-black text-amber-400 tracking-tight font-mono text-left">R$ {receitaTotal.toFixed(2)}</p>
+              <p className="text-[10px] text-slate-400 font-semibold text-left">
+                Soma histórica computada
+              </p>
+            </div>
+
+            <div className="bg-slate-850 p-4 border border-slate-800 rounded-2xl relative space-y-1">
+              <span className="text-[9px] uppercase tracking-wider text-slate-400 font-extrabold block text-left">Receita Mensal</span>
+              <p className="text-2xl font-black text-sky-400 tracking-tight font-mono text-left">R$ {receitaMensal.toFixed(2)}</p>
+              <p className="text-[10px] text-slate-400 font-semibold text-left">
+                Vendas nos últimos 30 dias
               </p>
             </div>
           </div>
@@ -863,9 +906,9 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ session, trigger
                         </td>
                         <td className="p-3">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            usr.plan.toLowerCase() === "enterprise" ? "bg-amber-550/20 text-amber-400 border border-amber-500/30" :
-                            usr.plan.toLowerCase() === "agência" || usr.plan.toLowerCase() === "agency" ? "bg-purple-600/20 text-purple-400 border border-purple-500/30" :
-                            usr.plan.toLowerCase() === "pro" ? "bg-sky-500/20 text-sky-400 border border-sky-500/30" :
+                            (usr.plan || '').toLowerCase() === "enterprise" ? "bg-amber-550/20 text-amber-400 border border-amber-500/30" :
+                            (usr.plan || '').toLowerCase() === "agência" || (usr.plan || '').toLowerCase() === "agency" ? "bg-purple-600/20 text-purple-400 border border-purple-500/30" :
+                            (usr.plan || '').toLowerCase() === "pro" ? "bg-sky-500/20 text-sky-400 border border-sky-500/30" :
                             "bg-slate-700/30 text-slate-400"
                           }`}>
                             {usr.plan}

@@ -38,8 +38,8 @@ export const RadarDigital: React.FC<RadarDigitalProps> = ({ leads, triggerNotifi
   }
 
   // Calculate customized details based on the current lead profile
-  const isPadaria = activeLead.niche.toLowerCase().includes("padar") || activeLead.niche.toLowerCase().includes("doc") || activeLead.niche.toLowerCase().includes("confe");
-  const isDentist = activeLead.niche.toLowerCase().includes("dent") || activeLead.niche.toLowerCase().includes("sorr") || activeLead.niche.toLowerCase().includes("odonto");
+  const isPadaria = (activeLead.niche || '').toLowerCase().includes("padar") || (activeLead.niche || '').toLowerCase().includes("doc") || (activeLead.niche || '').toLowerCase().includes("confe");
+  const isDentist = (activeLead.niche || '').toLowerCase().includes("dent") || (activeLead.niche || '').toLowerCase().includes("sorr") || (activeLead.niche || '').toLowerCase().includes("odonto");
 
   // Mock score breakdown formulas based on GMB details (Module 8)
   const noSiteScore = !activeLead.hasWebsite ? 30 : 5;

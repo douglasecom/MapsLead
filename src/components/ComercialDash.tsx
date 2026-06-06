@@ -147,7 +147,7 @@ export const ComercialDash: React.FC<ComercialDashProps> = ({
             name: `Time de ${userProfile?.name || auth.currentUser?.email || 'Membro'}`,
             ownerId: activeUserId,
             members: [{ userId: activeUserId, name: userProfile?.name || 'Proprietário', email: auth.currentUser?.email || '', role: 'Administrador' }],
-            maxMembers: currentPlan.toLowerCase() === 'starter' ? 1 : currentPlan.toLowerCase() === 'pro' ? 3 : currentPlan.toLowerCase() === 'agência' ? 10 : 50
+            maxMembers: (currentPlan || '').toLowerCase() === 'starter' ? 1 : (currentPlan || '').toLowerCase() === 'pro' ? 3 : (currentPlan || '').toLowerCase() === 'agência' ? 10 : 50
           };
           await setDoc(doc(db, 'teams', newTeamId), initialTeam);
           setTeam(initialTeam);
@@ -282,7 +282,7 @@ export const ComercialDash: React.FC<ComercialDashProps> = ({
     }
 
     // Identify limit per plan:
-    const activeLimitObj = dbPlans.find(p => p.name.toLowerCase() === currentPlan.toLowerCase()) || { maxUsers: 3 };
+    const activeLimitObj = dbPlans.find(p => (p.name || '').toLowerCase() === (currentPlan || '').toLowerCase()) || { maxUsers: 3 };
     const maxSeats = activeLimitObj.maxUsers;
 
     if (team.members.length >= maxSeats) {
@@ -691,7 +691,7 @@ export const ComercialDash: React.FC<ComercialDashProps> = ({
             {/* General dynamic Firestore plans grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {dbPlans.map((plan) => {
-                const isActive = currentPlan.toLowerCase() === plan.name.toLowerCase();
+                const isActive = (currentPlan || '').toLowerCase() === (plan.name || '').toLowerCase();
                 const isEditing = editingPlanId === plan.id;
 
                 return (
@@ -832,10 +832,10 @@ export const ComercialDash: React.FC<ComercialDashProps> = ({
                     {payments.map((p) => (
                       <tr key={p.id} className="border-b font-semibold text-slate-700 last:border-0 hover:bg-slate-50 transition-colors">
                         <td className="py-3 text-left font-mono text-[10px] text-indigo-650">{p.id}</td>
-                        <td className="py-3 text-center">{new Date(p.date).toLocaleDateString()}</td>
-                        <td className="py-3 text-center font-mono text-slate-900 font-bold">R$ {p.amount.toFixed(2)}</td>
-                        <td className="py-3 text-center uppercase text-[10px]"><span className="bg-slate-100 px-2 py-0.5 rounded text-slate-700 font-mono font-bold">{p.method}</span></td>
-                        <td className="py-3 text-right"><a href={p.link} target="_blank" rel="noreferrer" className="text-blue-600 font-bold hover:underline">Download PDF</a></td>
+                        <td className="py-3 text-center">{p.date ? new Date(p.date).toLocaleDateString() : "-"}</td>
+                        <td className="py-3 text-center font-mono text-slate-900 font-bold">R$ {(p.amount || 0).toFixed(2)}</td>
+                        <td className="py-3 text-center uppercase text-[10px]"><span className="bg-slate-100 px-2 py-0.5 rounded text-slate-700 font-mono font-bold">{p.method || "PIX"}</span></td>
+                        <td className="py-3 text-right"><a href={p.link || "#"} target="_blank" rel="noreferrer" className="text-blue-600 font-bold hover:underline">Download PDF</a></td>
                       </tr>
                     ))}
                   </tbody>
@@ -917,7 +917,7 @@ export const ComercialDash: React.FC<ComercialDashProps> = ({
                   <p className="text-slate-450 text-[11px]">Gestores e SDRs operando concorrentemente em tempo real no Firestore.</p>
                 </div>
                 <span className="text-xs bg-indigo-50 text-indigo-700 px-3 py-1 rounded-xl font-bold font-mono">
-                  {team?.members?.length || 1} / {dbPlans.find(p => p.name.toLowerCase() === currentPlan.toLowerCase())?.maxUsers || 1} Assentos
+                  {team?.members?.length || 1} / {dbPlans.find(p => (p.name || '').toLowerCase() === (currentPlan || '').toLowerCase())?.maxUsers || 1} Assentos
                 </span>
               </div>
 

@@ -649,14 +649,14 @@ Agradecemos sua colaboração com nossa rede de negócios!
                 {payments.map((pay) => (
                   <tr key={pay.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
                     <td className="py-3.5 px-4 font-mono font-medium">
-                      {new Date(pay.date).toLocaleDateString()}
+                      {pay.date ? new Date(pay.date).toLocaleDateString() : "-"}
                     </td>
                     <td className="py-3.5 px-4 font-bold">
-                      {pay.amount <= 20 ? "Pacote de Prospecção Slim" :
-                       pay.amount <= 100 ? "Créditos Avulsos de Leads" : "Assinatura Pro Mensal AdsHive"}
+                      {(pay.amount || 0) <= 20 ? "Pacote de Prospecção Slim" :
+                       (pay.amount || 0) <= 100 ? "Créditos Avulsos de Leads" : "Assinatura Pro Mensal AdsHive"}
                     </td>
                     <td className="py-3.5 px-4 font-extrabold text-emerald-500">
-                      R$ {pay.amount.toFixed(2)}
+                      R$ {(pay.amount || 0).toFixed(2)}
                     </td>
                     <td className="py-3.5 px-4 font-semibold uppercase">
                       {pay.method || "PIX"}

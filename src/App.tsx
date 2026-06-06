@@ -780,6 +780,22 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
 
           {/* Dynamic Indicator Visual (Permanente no topo) */}
           <div className="hidden lg:flex items-center gap-6 border-l pl-6 border-slate-200 dark:border-[#2B2B3A]">
+            {session?.email?.toLowerCase() !== 'douglasbateriacma@gmail.com' && ((session?.plan || 'Gratuito').toLowerCase() === 'gratuito' || (session?.plan || 'Gratuito').toLowerCase() === 'free') && (
+              <div id="header-free-alert" className="flex items-center gap-2 bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-[11px] font-extrabold px-3 py-1.5 rounded-xl">
+                <span className="animate-pulse">⚠️ ALERTA DE LIMITE GRATUITO: {session?.planCredits !== undefined ? session.planCredits : 10}/10 RESTANTES</span>
+                <button 
+                  id="header-free-upgrade"
+                  onClick={() => {
+                    setActiveTab("comercial");
+                    triggerNotification("Redirecionando para grade de upgrade de planos...", "info");
+                  }}
+                  className="bg-amber-500 hover:bg-amber-600 text-slate-950 px-2.5 py-0.5 rounded-lg font-black text-[10px] transition-all uppercase cursor-pointer"
+                >
+                  Fazer Upgrade
+                </button>
+              </div>
+            )}
+
             <div className="flex flex-col">
               <span className="text-[10px] text-slate-400 dark:text-[#7A7D8B] font-bold uppercase tracking-wider">Plano Atual</span>
               <span className={`text-xs font-black flex items-center gap-1 ${themeMode === 'light' ? 'text-slate-800' : 'text-white'}`}>
@@ -1001,9 +1017,33 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
           </div>
         </aside>
 
-        {/* Primary Screen Area depending on activeTab context */}
+         {/* Primary Screen Area depending on activeTab context */}
         <main id="main-content-canvas" className="flex-1 lg:ml-[280px] p-4 md:p-8 pb-24 lg:pb-8 transition-all max-w-7xl mx-auto w-full">
           
+          {session?.subscriptionStatus === "CANCELED" && (
+            <div id="canceled-subscription-banner" className="bg-slate-800 border border-slate-700 text-white p-5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-lg mb-6 text-left w-full">
+              <div className="flex items-center gap-3">
+                <Sparkles className="w-6 h-6 text-[#8B2EFF] shrink-0 animate-pulse" />
+                <div>
+                  <strong className="text-sm uppercase tracking-wide font-black block text-slate-200">Sua Assinatura foi Cancelada</strong>
+                  <span className="text-sm text-slate-300 font-medium">
+                    Sentimos sua saída. Seu histórico permanece salvo caso deseje retornar.
+                  </span>
+                </div>
+              </div>
+              <button 
+                id="btn-reactivate-subscription"
+                onClick={() => {
+                  setActiveTab("comercial");
+                  triggerNotification("Redirecionando para nossos planos de assinatura...", "info");
+                }}
+                className="bg-[#8B2EFF] hover:bg-[#8026eb] text-white font-black text-xs px-5 py-2.5 rounded-xl border-none transition-all shadow-md shrink-0 cursor-pointer"
+              >
+                Reatividades & Planos
+              </button>
+            </div>
+          )}
+
           {session?.subscriptionStatus === "PAST_DUE" && activeTab !== "financeiro" && activeTab !== "loja_creditos" && (
             <div id="past-due-notification-banner" className="bg-red-600 border border-red-500 text-white p-5 rounded-2xl flex items-center justify-between gap-4 shadow-lg mb-6 text-left">
               <div className="flex items-center gap-3">
@@ -2681,52 +2721,52 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
             </div>
 
             <div className="space-y-2">
-              <span className="text-[10px] font-black tracking-widest text-blue-600 uppercase">Limite Atingido • Plano Gratuito</span>
-              <h3 className="text-2xl font-black text-slate-900 tracking-tight">Liberte o Potencial do AdsHive Prospect!</h3>
+              <span className="text-[10px] font-black tracking-widest text-[#8B2EFF] uppercase">Limite Excedido • Plano Gratuito</span>
+              <h3 id="modal-title-free-limit" className="text-2xl font-black text-slate-900 tracking-tight">Você utilizou seus 10 leads gratuitos.</h3>
               <p className="text-slate-500 text-sm leading-relaxed max-w-sm mx-auto font-medium">
-                Seu saldo de testes acabou. Faça o upgrade de seu plano comercial ou compre créditos avulsos para continuar extraindo leads e gerando mensagens com inteligência artificial.
+                Seu limite de testes gratuitos do AdsHive Prospect foi atingido. Ative seu plano completo agora ou compre mais créditos avulsos no painel financeiro.
               </p>
             </div>
 
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col gap-2.5 text-left text-xs text-slate-600 font-semibold">
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col gap-2.5 text-left text-xs text-slate-600 font-semibold font-sans">
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                <span>Pesquisa de leads ilimitada em todo o Brasil</span>
+                <span>Pesquisa de leads ilimitada no Google Maps</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                <span>Auditoria de SSL, Pixel e SEO completos no Radar Digital</span>
+                <span>Verificação de presença digital, Pixel, site e SSL</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                <span>Exportação completa em segundos para planilhas CSV/XLS</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                <span>Criação ilimitada de pitches ultra-persuasivos com IA</span>
+                <span>Abordagens ultrarrealistas geradas por nossa Inteligência Artificial</span>
               </div>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-3 pt-2">
               <button
+                id="modal-btn-buy-credits"
                 onClick={() => {
                   setShowPremiumBlockerModal(false);
-                  setActiveTab("loja_creditos");
+                  setActiveTab("financeiro");
+                  triggerNotification("Redirecionando para compra de créditos no Financeiro...", "info");
                 }}
-                className="flex-1 bg-amber-500 hover:bg-amber-600 text-white font-extrabold py-3.5 px-6 rounded-xl text-xs active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                className="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black py-3.5 px-6 rounded-xl text-xs active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
               >
-                <Coins className="w-4 h-4 text-white" />
-                <span>Recarregar Créditos</span>
+                <Coins className="w-4 h-4 shrink-0" />
+                <span>Comprar Créditos</span>
               </button>
               <button
+                id="modal-btn-subscribe"
                 onClick={() => {
                   setShowPremiumBlockerModal(false);
                   setActiveTab("comercial");
+                  triggerNotification("Redirecionando para nossos planos de assinatura...", "info");
                 }}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-extrabold py-3.5 px-6 rounded-xl text-xs active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                className="flex-1 bg-[#8B2EFF] hover:bg-[#7a22ef] text-white font-black py-3.5 px-6 rounded-xl text-xs active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-glow-purple"
               >
-                <DollarSign className="w-4 h-4 text-white" />
-                <span>Assinar Plano Mensal</span>
+                <Sparkles className="w-4 h-4 shrink-0 animate-pulse" />
+                <span>Assinar Plano</span>
               </button>
             </div>
 

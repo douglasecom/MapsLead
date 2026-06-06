@@ -334,8 +334,8 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onSignIn }) => {
         ...tempUserSession,
         onboardingSegment: onboardingSegment || 'Outro',
         onboardingObjective: onboardingObjective || 'Encontrar clientes',
-        credits: tempUserSession.email.toLowerCase() === 'douglasbateriacma@gmail.com' ? 999999 : 10,
-        remainingCredits: tempUserSession.email.toLowerCase() === 'douglasbateriacma@gmail.com' ? 999999 : 10,
+        credits: (tempUserSession.email || '').toLowerCase() === 'douglasbateriacma@gmail.com' ? 999999 : 10,
+        remainingCredits: (tempUserSession.email || '').toLowerCase() === 'douglasbateriacma@gmail.com' ? 999999 : 10,
       };
 
       // Save user profile with onboarding tags directly to Firestore

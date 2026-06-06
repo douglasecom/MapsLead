@@ -90,8 +90,8 @@ export const AdminCredits: React.FC<AdminCreditsProps> = ({ session, triggerNoti
 
   // Filter lists based on search
   const filteredUsers = usersList.filter(u => 
-    u.email.toLowerCase().includes(searchEmail.toLowerCase()) || 
-    u.name.toLowerCase().includes(searchEmail.toLowerCase())
+    (u.email || '').toLowerCase().includes((searchEmail || '').toLowerCase()) || 
+    (u.name || '').toLowerCase().includes((searchEmail || '').toLowerCase())
   );
 
   // Save Settings to Firestore
@@ -225,7 +225,7 @@ export const AdminCredits: React.FC<AdminCreditsProps> = ({ session, triggerNoti
   };
 
   // Compute live calculations for metric statistics based on users database snapshot
-  const freeUsersCount = usersList.filter(u => u.plan.toLowerCase() === "gratuito" || u.plan.toLowerCase() === "free").length;
+  const freeUsersCount = usersList.filter(u => (u.plan || '').toLowerCase() === "gratuito" || (u.plan || '').toLowerCase() === "free").length;
   const paidUsersCount = usersList.length - freeUsersCount;
   const totalPurchasedCredits = usersList.reduce((acc, current) => acc + (current.purchasedCredits || 0), 0);
   
@@ -233,7 +233,7 @@ export const AdminCredits: React.FC<AdminCreditsProps> = ({ session, triggerNoti
   const conversionRate = usersList.length > 0 ? (paidUsersCount / usersList.length) * 100 : 0;
   const estimatedCreditRevenue = totalPurchasedCredits * 0.20; // R$ 0.20 por lead vendido avulso
   const estimatedRecurrentMRR = usersList.reduce((acc, u) => {
-    const pl = u.plan.toLowerCase();
+    const pl = (u.plan || '').toLowerCase();
     if (pl.includes("starter")) return acc + 49;
     if (pl.includes("pro")) return acc + 97;
     if (pl.includes("agência") || pl.includes("agency")) return acc + 197;

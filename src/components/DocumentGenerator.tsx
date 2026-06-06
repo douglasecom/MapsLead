@@ -27,7 +27,7 @@ export const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
   const rating = lead.rating || 4.2;
   const reviewsCount = lead.reviews || 88;
   const targetLocation = lead.location || "São Paulo, SP";
-  const normalizedNiche = lead.niche.toLowerCase();
+  const normalizedNiche = (lead.niche || '').toLowerCase();
 
   const handlePrint = () => {
     const printContent = document.getElementById('printable-document-area');
@@ -323,7 +323,7 @@ export const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
                   <div className="bg-slate-900 py-2 px-4 flex items-center justify-between text-slate-400 font-mono text-[9px] border-b border-slate-850">
                     <div className="flex items-center gap-1.5 truncate">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                      <span className="truncate">stitch.google.com/{lead.name.toLowerCase().replace(/\s+/g, '-')}</span>
+                      <span className="truncate">stitch.google.com/{(lead.name || '').toLowerCase().replace(/\s+/g, '-')}</span>
                     </div>
                     <span className="text-[8px] bg-emerald-500/25 text-emerald-400 px-1 py-0.5 rounded font-black font-mono">SSL ATIVO</span>
                   </div>
