@@ -4,16 +4,61 @@
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  /* Map premium tailwind token names */
+  --color-brand-primary: var(--color-primary);
+  --color-brand-secondary: var(--color-secondary);
+  --color-brand-accent: var(--color-accent);
+  
+  --color-app-bg: var(--bg-app);
+  --color-app-surface: var(--bg-surface);
+  --color-app-card: var(--bg-card);
+  --color-app-border: var(--border-custom);
+  --color-app-text: var(--text-primary);
+  --color-app-text-sec: var(--text-secondary);
+  --color-app-text-suave: var(--text-suave);
+  --shadow-glow-purple: var(--glow-shadow);
+}
+
+:root {
+  /* Default Theme: Dark Premium Theme (concept: Stripe/Linear) */
+  --bg-app: #0B0B0F;
+  --bg-surface: #14141B;
+  --bg-card: #1C1C26;
+  --border-custom: #2B2B3A;
+  --text-primary: #FFFFFF;
+  --text-secondary: #B0B3C1;
+  --text-suave: #7A7D8B;
+  --color-primary: #8B2EFF;
+  --color-secondary: #5A1CCB;
+  --color-accent: #C93CFF;
+  --glow-shadow: 0 0 20px rgba(139, 46, 255, 0.4);
+}
+
+/* Light Theme Mode rules override */
+.theme-light {
+  --bg-app: #F8F9FC;
+  --bg-surface: #FFFFFF;
+  --bg-card: #FFFFFF;
+  --border-custom: #E5E7EB;
+  --text-primary: #111827;
+  --text-secondary: #6B7280;
+  --text-suave: #9CA3AF;
+  --color-primary: #8B2EFF;
+  --color-secondary: #C93CFF;
+  --color-accent: #D946EF;
+  --glow-shadow: 0 0 15px rgba(139, 46, 255, 0.12);
 }
 
 body {
   font-family: var(--font-sans);
-  background-color: #f8f9ff;
-  color: #0b1c30;
+  background-color: var(--bg-app);
+  color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-/* Custom Scrollbars */
+/* Custom Scrollbars in Slate style */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -22,10 +67,103 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: var(--border-custom);
   border-radius: 10px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: var(--text-suave);
 }
 
+/* Premium identity system styles */
+.premium-gradient-text {
+  background: linear-gradient(135deg, #8B2EFF, #C93CFF);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Card Glow Elevations */
+.premium-card-glow {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-custom);
+  border-radius: 16px;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.premium-card-glow:hover {
+  box-shadow: var(--glow-shadow);
+  transform: translateY(-2px);
+  border-color: #8B2EFF;
+}
+
+/* Premium Primary Buttons */
+.btn-premium-primary {
+  background-color: #8B2EFF !important;
+  color: #FFFFFF !important;
+  border-radius: 12px;
+  font-weight: 600;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.btn-premium-primary:hover {
+  background-color: #9C4DFF !important;
+  box-shadow: 0 0 16px rgba(139, 46, 255, 0.5);
+  transform: scale(1.02);
+}
+
+/* Premium Secondary Buttons */
+.btn-premium-secondary {
+  background-color: transparent !important;
+  border: 1px solid #8B2EFF !important;
+  color: #8B2EFF !important;
+  border-radius: 12px;
+  font-weight: 600;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.btn-premium-secondary:hover {
+  background-color: rgba(139, 46, 255, 0.1) !important;
+  border-color: #9C4DFF !important;
+}
+
+/* Smooth active menu buttons */
+.menu-active-state {
+  background-color: #8B2EFF !important;
+  color: #FFFFFF !important;
+  font-weight: bold;
+}
+
+/* Global element classes override for automatic dark system mapping */
+.theme-dark .bg-white,
+.theme-dark .bg-slate-50,
+.theme-dark .bg-slate-100,
+.theme-dark .bg-slate-200/50,
+.theme-dark .bg-[#f8f9ff] {
+  background-color: var(--bg-app);
+}
+
+.theme-dark .bg-slate-50,
+.theme-dark .bg-slate-100 {
+  background-color: var(--bg-surface);
+}
+
+.theme-dark .bg-white {
+  background-color: var(--bg-card);
+}
+
+.theme-dark .border-slate-200,
+.theme-dark .border-slate-300 {
+  border-color: var(--border-custom);
+}
+
+.theme-dark .text-slate-800,
+.theme-dark .text-slate-900,
+.theme-dark .text-[#0b1c30] {
+  color: var(--text-primary);
+}
+
+.theme-dark .text-slate-600,
+.theme-dark .text-slate-500 {
+  color: var(--text-secondary);
+}
+
+.theme-dark .text-slate-450,
+.theme-dark .text-slate-400 {
+  color: var(--text-suave);
+}

@@ -132,8 +132,8 @@ export const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
                     <p className="text-slate-500 font-mono text-[10px] mt-1">Ref Presença Google Maps: {lead.name} • Código #{Math.floor(Math.random() * 900000 + 100000)}</p>
                   </div>
                   <div className="text-right shrink-0">
-                    <span className="font-bold text-indigo-600 uppercase block font-mono text-sm">MapsLeads Hub</span>
-                    <span className="text-slate-400 block text-[10px]">contato@mapsleadshub.com.br</span>
+                    <span className="font-bold text-indigo-600 uppercase block font-mono text-sm">AdsHive Prospect</span>
+                    <span className="text-slate-400 block text-[10px]">contato@adshive.online</span>
                   </div>
                 </div>
 
@@ -214,7 +214,7 @@ export const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
                 {/* 4. Valores e Investimento */}
                 <div className="space-y-2">
                   <h3 className="text-sm font-extrabold text-slate-900 border-l-4 border-indigo-600 pl-2 uppercase">4. Viabilidade Financeira & Investimento</h3>
-                  <p className="text-slate-600 font-medium">Preparamos uma oferta comercial de adesão simplificada para parceiros identificados via MapsLeads:</p>
+                  <p className="text-slate-600 font-medium">Preparamos uma oferta comercial de adesão simplificada para parceiros identificados via AdsHive Prospect:</p>
                   
                   <div className="bg-[#f8f9ff] border-2 border-indigo-100 p-5 rounded-2xl grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
                     <div>
@@ -246,7 +246,7 @@ export const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
                 <div className="space-y-2">
                   <strong className="text-slate-900 block uppercase relative">1. DAS PARTES CONTRATANTES</strong>
                   <p className="text-slate-650 font-semibold leading-normal">
-                    <strong>CONTRATADA:</strong> MAPSLEADS HUB SOLUÇÕES DIGITAIS, pessoa jurídica de direito privado fictícia integrada ao workspace, doravante denominada simplesmente CONTRATADA.
+                    <strong>CONTRATADA:</strong> ADSHIVE PROSPECT SOLUÇÕES DIGITAIS, pessoa jurídica de direito privado fictícia integrada ao workspace, doravante denominada simplesmente CONTRATADA.
                   </p>
                   <p className="text-slate-650 font-semibold leading-normal">
                     <strong>CONTRATANTE:</strong> {lead.name}, já identificada e qualificada através do banco de dados comercial local em <strong>{targetLocation}</strong>, doravante denominada simplesmente CONTRATANTE.
@@ -290,7 +290,7 @@ export const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
                   <div className="border-t border-slate-350 pt-4 space-y-1">
                     <div className="h-10"></div>
                     <span className="font-extrabold text-slate-700 block">________________________________________</span>
-                    <span className="text-slate-800 text-xs font-bold block">MAPSLEADS HUB</span>
+                    <span className="text-slate-800 text-xs font-bold block">ADSHIVE PROSPECT</span>
                     <span className="text-[10px] block">Consultoria Comercial Autonoma</span>
                   </div>
 
@@ -549,7 +549,7 @@ export const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
                     {/* Integrated Footing */}
                     <div className="bg-slate-900 text-slate-450 p-4 text-center text-[9px] space-y-1 relative pb-10">
                       <span className="text-white font-extrabold block">© {lead.name} - {targetLocation}</span>
-                      <span className="text-slate-500 block leading-normal">Desenvolvido em conformidade de SEO com a plataforma MapsLeads Hub</span>
+                      <span className="text-slate-500 block leading-normal">Desenvolvido em conformidade de SEO com a plataforma AdsHive Prospect</span>
                       {/* Simulated Home Indicators Bar of modern smartphones */}
                       <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 w-28 h-1 bg-slate-650 rounded-full"></div>
                     </div>

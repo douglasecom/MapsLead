@@ -167,7 +167,7 @@ export const LojaCreditos: React.FC<LojaCreditosProps> = ({ session, triggerNoti
             <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
             Vendas por Consumo e Sob Medida
           </span>
-          <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight">Loja de Créditos MapsLeads</h2>
+          <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight">Loja de Créditos AdsHive Prospect</h2>
           <p className="text-slate-300 text-sm leading-relaxed">
             Acabe com a barreira dos planos fixos. Adquira créditos sob demanda por apenas <strong className="text-white">R$ 0,20 por lead</strong>. 
             Sem data de expiração para os créditos comprados e com liberação instantânea.

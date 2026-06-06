@@ -231,7 +231,7 @@ export const ComercialDash: React.FC<ComercialDashProps> = ({
 
   // Force cancel subscription
   const handleCancelSubscription = async () => {
-    if (!confirm("Deseja realmente cancelar sua renovação recorrente do SaaS MapsLeads? Seu plano continuará ativo em modo limitado.")) return;
+    if (!confirm("Deseja realmente cancelar sua renovação recorrente do SaaS AdsHive Prospect? Seu plano continuará ativo em modo limitado.")) return;
     
     try {
       const userRef = doc(db, 'users', activeUserId);
@@ -437,7 +437,7 @@ export const ComercialDash: React.FC<ComercialDashProps> = ({
           }`}
         >
           <CreditCard className="w-4 h-4" />
-          <span>Assinaturas SaaS</span>
+          <span>Meu Plano</span>
         </button>
 
         <button 
@@ -450,15 +450,17 @@ export const ComercialDash: React.FC<ComercialDashProps> = ({
           <span>Gestão da Equipe</span>
         </button>
 
-        <button 
-          onClick={() => setActiveSubTab('webhook')}
-          className={`flex-1 py-3 px-4 rounded-xl font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer ${
-            activeSubTab === 'webhook' ? "bg-slate-900 text-white shadow-md font-extrabold" : "text-slate-500 hover:bg-slate-50"
-          }`}
-        >
-          <ShieldAlert className="w-4 h-4 text-amber-500" />
-          <span>Webhooks Simulator</span>
-        </button>
+        {userProfile?.email?.toLowerCase() === 'douglasbateriacma@gmail.com' && (
+          <button 
+            onClick={() => setActiveSubTab('webhook')}
+            className={`flex-1 py-3 px-4 rounded-xl font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer ${
+              activeSubTab === 'webhook' ? "bg-slate-900 text-white shadow-md font-extrabold" : "text-slate-500 hover:bg-slate-50"
+            }`}
+          >
+            <ShieldAlert className="w-4 h-4 text-amber-500" />
+            <span>Webhooks Simulator</span>
+          </button>
+        )}
       </div>
 
       {/* SUB-TAB 1: RECEITA DASHBOARD (MODULE 15) */}
@@ -680,7 +682,7 @@ export const ComercialDash: React.FC<ComercialDashProps> = ({
 
             <div className="max-w-xl text-left mb-8">
               <span className="bg-blue-500/10 text-blue-400 text-[9px] font-black px-3 py-0.5 rounded-full uppercase tracking-wider block w-max mb-2">
-                ASSINATURAS MAPSLEADS & ASAAS
+                MEU PLANO
               </span>
               <h3 className="text-2xl font-black text-white tracking-tight">Catálogo de Planos Comerciais</h3>
               <p className="text-slate-400 text-xs mt-1">Planos integrados de forma transparente com o Asaas. Obtenha limites estendidos e mais assentos de SDR/Operador.</p>
@@ -803,14 +805,7 @@ export const ComercialDash: React.FC<ComercialDashProps> = ({
               })}
             </div>
 
-            {/* Asaas Setup Masked Variables */}
-            <div className="border-t border-white/5 pt-6 mt-8 space-y-2">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block text-left">Gateway Integrado</span>
-              <div className="flex items-center gap-1.5 text-xs text-slate-450 font-mono">
-                <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
-                <span>Asaas API Ativo credenciado via Wallet id 78333e16-fe11-4602-88bf-d409bc36f2b0</span>
-              </div>
-            </div>
+
 
           </div>
 
@@ -884,7 +879,7 @@ export const ComercialDash: React.FC<ComercialDashProps> = ({
                     type="email" 
                     value={inviteEmail}
                     onChange={(e) => setInviteEmail(e.target.value)}
-                    placeholder="EX: pedro@mapsleads.com" 
+                    placeholder="EX: pedro@adshive.online" 
                     required 
                     className="w-full bg-slate-50 border p-2.5 rounded-xl text-xs font-semibold focus:bg-white outline-indigo-500" 
                   />

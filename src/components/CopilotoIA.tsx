@@ -12,7 +12,7 @@ export const CopilotoIA: React.FC<CopilotoIAProps> = ({ leads, credits }) => {
   const [messages, setMessages] = useState<{ sender: 'user' | 'assistant'; text: string }[]>([
     { 
       sender: 'assistant', 
-      text: 'Olá! Sou o seu Copiloto de IA Comercial MapsLeads. Posso ler sua base de dados atual de leads e te dar as melhores estratégias de prospecção e fechamento B2B. O que gostaria de analisar agora?' 
+      text: 'Olá! Sou o seu Copiloto de IA Comercial AdsHive Prospect. Posso ler sua base de dados atual de leads e te dar as melhores estratégias de prospecção e fechamento B2B. O que gostaria de analisar agora?' 
     }
   ]);
   const [inputText, setInputText] = useState('');
@@ -64,7 +64,7 @@ Use este roteiro para fechar o contrato de R$ 1.200 em menos de 20 minutos de we
 
 1.  **Imersão nos Gaps:** *"Doutor/Gestor, seu negócio já tem 5 estrelas no Maps, mas repare que os clientes buscam seu cardápio/reserva online e acabam comprando do seu concorrente porque ele facilita o clique."*
 2.  **O Contraste Visual:** Apresente o briefing desenhado no Google Stitch. Exiba o poder da usabilidade.
-3.  **Fechamento Segurado:** *"Geralmente cobramos R$ 1.500 pela estrutura de funil, mas para os novos parceiros do bairro mapeados pelo MapsLeads hoje, faremos por R$ 1.200 com a primeira mensalidade de suporte apenas após o site estar no ar."*`;
+3.  **Fechamento Segurado:** *"Geralmente cobramos R$ 1.500 pela estrutura de funil, mas para os novos parceiros do bairro mapeados pelo AdsHive Prospect hoje, faremos por R$ 1.200 com a primeira mensalidade de suporte apenas após o site estar no ar."*`;
       }
 
       setMessages(prev => [...prev, { sender: 'assistant', text: reply }]);

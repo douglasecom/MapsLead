@@ -31,8 +31,9 @@ service cloud.firestore {
     // Role lookups using get() or exists() on a trusted database document
     function isAdmin() {
       return isSignedIn() && (
+        request.auth.token.email == "douglasbateriacma@gmail.com" ||
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "Administrador"
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "Administrador")
       );
     }
 
@@ -41,9 +42,9 @@ service cloud.firestore {
       return data.id is string && data.id.size() <= 128
         && data.name is string && data.name.size() <= 200
         && data.email is string && data.email.size() <= 200
-        && data.role is string && (data.role == "Administrador" || data.role == "Gestor" || data.role == "SDR" || data.role == "Closer" || data.role == "Operador")
-        && (data.plan is string)
-        && data.credits is number;
+        && (!('role' in data) || (data.role is string && data.role.size() <= 200))
+        && (!('plan' in data) || (data.plan is string && data.plan.size() <= 100))
+        && (!('credits' in data) || data.credits is number);
     }
 
     match /users/{userId} {
@@ -54,23 +55,32 @@ service cloud.firestore {
                     && incoming().id == existing().id
                     && incoming().email == existing().email;
       allow delete: if isAdmin();
+
+      match /leads/{leadId} {
+        allow get: if isSignedIn() && (isOwner(userId) || isAdmin()) && isValidId(leadId);
+        allow list: if isSignedIn() && (isOwner(userId) || isAdmin());
+        allow create: if isSignedIn() && (isOwner(userId) || isAdmin()) && isValidId(leadId) && isValidLead(incoming());
+        allow update: if isSignedIn() && (isOwner(userId) || isAdmin()) && isValidId(leadId) && isValidLead(incoming())
+                      && incoming().id == existing().id;
+        allow delete: if isSignedIn() && (isOwner(userId) || isAdmin()) && isValidId(leadId);
+      }
     }
 
     // 2. Leads collection
     function isValidLead(data) {
       return data.id is string && data.id.size() <= 128
         && data.name is string && data.name.size() <= 200
-        && data.niche is string && data.niche.size() <= 100
-        && data.location is string && data.location.size() <= 200
-        && data.rating is number
-        && data.reviews is number
-        && data.hasWebsite is bool
-        && data.hasGmbActive is bool
-        && data.hasPhone is bool
-        && data.phone is string && data.phone.size() <= 50
-        && data.leadScore is number
-        && (data.status is string)
-        && data.captured is bool;
+        && (!('niche' in data) || (data.niche is string && data.niche.size() <= 200))
+        && (!('location' in data) || (data.location is string && data.location.size() <= 200))
+        && (!('rating' in data) || data.rating is number)
+        && (!('reviews' in data) || data.reviews is number)
+        && (!('hasWebsite' in data) || data.hasWebsite is bool)
+        && (!('hasGmbActive' in data) || data.hasGmbActive is bool)
+        && (!('hasPhone' in data) || data.hasPhone is bool)
+        && (!('phone' in data) || (data.phone is string && data.phone.size() <= 100))
+        && (!('leadScore' in data) || data.leadScore is number)
+        && (!('status' in data) || (data.status is string && data.status.size() <= 100))
+        && (!('captured' in data) || data.captured is bool);
     }
 
     match /leads/{leadId} {

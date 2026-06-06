@@ -1,6 +1,6 @@
 {
-  "name": "MapsLeads",
-  "description": "Dashboard de prospecção e captura de leads do Google Maps, com análise de presença digital e geração de abordagens personalizadas via IA (Gemini).",
+  "name": "AdsHive Prospect",
+  "description": "Dashboard de prospecção e captura de leads do Google Maps, com análise de presença digital e geração de abordagens personalizadas via IA (Gemini) - AdsHive Prospect.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

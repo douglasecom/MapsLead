@@ -39,7 +39,8 @@ import {
   Sparkle,
   Bookmark,
   Share2,
-  FileText
+  FileText,
+  ShieldAlert
 } from "lucide-react";
 import { initialLeads } from "./initialData";
 import { Lead, GeneratedMessage, UserSession } from "./types";
@@ -52,6 +53,7 @@ import { CopilotoIA } from "./components/CopilotoIA";
 import { DocumentGenerator } from "./components/DocumentGenerator";
 import { LojaCreditos } from "./components/LojaCreditos";
 import { AdminCredits } from "./components/AdminCredits";
+import { OwnerDashboard } from "./components/OwnerDashboard";
 import { collection, getDocs, setDoc, deleteDoc, doc, onSnapshot, getDoc } from "firebase/firestore";
 import { db } from "./firebase";
 
@@ -59,27 +61,113 @@ export default function App() {
   // Authentication & session context
   const [session, setSession] = useState<UserSession | null>(null);
 
+  // Theme states & appearance choice
+  const [themeMode, setThemeMode] = useState<"dark" | "light">(() => {
+    const saved = localStorage.getItem("theme");
+    return (saved === "light" || saved === "dark") ? saved : "dark";
+  });
+
+  const [appearanceChoice, setAppearanceChoice] = useState<"dark" | "light" | "system">(() => {
+    const saved = localStorage.getItem("appearance_choice");
+    return (saved === "light" || saved === "dark" || saved === "system") ? saved : "dark";
+  });
+
+  // Track system preference or choice updates
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.remove("theme-light", "theme-dark");
+    document.body.classList.remove("theme-light", "theme-dark");
+
+    let resolvedTheme: "dark" | "light" = themeMode;
+    if (appearanceChoice === "system") {
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      resolvedTheme = prefersDark ? "dark" : "light";
+    }
+
+    if (resolvedTheme === "light") {
+      root.classList.add("theme-light");
+      document.body.classList.add("theme-light");
+      root.style.backgroundColor = "#F8F9FC";
+      document.body.style.backgroundColor = "#F8F9FC";
+    } else {
+      root.classList.add("theme-dark");
+      document.body.classList.add("theme-dark");
+      root.style.backgroundColor = "#0B0B0F";
+      document.body.style.backgroundColor = "#0B0B0F";
+    }
+  }, [themeMode, appearanceChoice]);
+
+  const handleAppearanceChange = (choice: "dark" | "light" | "system") => {
+    setAppearanceChoice(choice);
+    localStorage.setItem("appearance_choice", choice);
+    if (choice === "dark") {
+      setThemeMode("dark");
+      localStorage.setItem("theme", "dark");
+    } else if (choice === "light") {
+      setThemeMode("light");
+      localStorage.setItem("theme", "light");
+    } else {
+      // System mode
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      setThemeMode(prefersDark ? "dark" : "light");
+      localStorage.removeItem("theme");
+    }
+  };
+
   // Navigation & View Mode
-  const [activeTab, setActiveTab] = useState<"inicio" | "pesquisa" | "leads" | "oportunidades" | "ai_gerador" | "admin" | "crm" | "radar" | "comercial">("inicio");
+  const [activeTab, setActiveTab] = useState<"inicio" | "pesquisa" | "leads" | "oportunidades" | "ai_gerador" | "admin" | "crm" | "radar" | "comercial" | "loja_creditos" | "dashboard-owner">("inicio");
+
+  // Sidebar tab active style mapping
+  const getSidebarBtnClass = (tabName: string) => {
+    const isActive = activeTab === tabName;
+    if (isActive) {
+      return themeMode === "light"
+        ? "bg-purple-50 text-[#8B2EFF] border-l-4 border-[#8B2EFF] font-black"
+        : "bg-[#1C1C26] text-[#8B2EFF] border-l-4 border-[#8B2EFF] font-black shadow-inner";
+    } else {
+      return themeMode === "light"
+        ? "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+        : "text-[#B0B3C1] hover:bg-[#1C1C26] hover:text-white";
+    }
+  };
+
+  // Route listening effect for direct link URL checks
+  useEffect(() => {
+    const handleLocationRouting = () => {
+      const pName = window.location.pathname;
+      if (pName === "/owner" || pName === "/admin" || pName === "/dashboard-owner") {
+        if (!session) return; // Wait for AuthGate login first
+        if (session.email?.toLowerCase() === "douglasbateriacma@gmail.com") {
+          setActiveTab("dashboard-owner");
+          triggerNotification("Redirecionado para o Painel de Controle Master com sucesso!", "success");
+        } else {
+          triggerNotification("Acesso negado: essa rota administrativa é exclusiva para o Owner.", "warning");
+          setActiveTab("inicio");
+          window.history.replaceState({}, "", "/");
+        }
+      }
+    };
+    handleLocationRouting();
+  }, [session]);
   
   // Real-time State Lists
-  const [leads, setLeads] = useState<Lead[]>(initialLeads);
+  const [leads, setLeads] = useState<Lead[]>([]);
 
   // Active Manager Config (Admin Dashboard)
   const [managerName, setManagerName] = useState<string>(() => localStorage.getItem("manager_name") || "Douglas CMA");
   const [managerRole, setManagerRole] = useState<string>(() => localStorage.getItem("manager_role") || "Vendedor Sênior");
-  const [managerBusiness, setManagerBusiness] = useState<string>(() => localStorage.getItem("manager_company") || "MapsLeads Pro");
+  const [managerBusiness, setManagerBusiness] = useState<string>(() => localStorage.getItem("manager_company") || "AdsHive Prospect Pro");
   const [managerPhone, setManagerPhone] = useState<string>(() => localStorage.getItem("manager_phone") || "+55 (11) 99876-5432");
   const [managerEmail, setManagerEmail] = useState<string>(() => localStorage.getItem("manager_email") || "douglasbateriacma@gmail.com");
-  const [managerSignature, setManagerSignature] = useState<string>(() => localStorage.getItem("manager_signature") || "Douglas - CEO na MapsLeads Consultoria");
+  const [managerSignature, setManagerSignature] = useState<string>(() => localStorage.getItem("manager_signature") || "Douglas - CEO na AdsHive Prospect Consultoria");
 
   // Pipeline funnel stage counters calculated dynamically
-  const countNovo = leads.filter(l => l.status === "novo").length;
-  const countInteressado = leads.filter(l => l.status === "interessado").length;
+  const countNovo = leads.filter(l => l.status === "novo" || l.status === "contatado").length;
+  const countInteressado = leads.filter(l => l.status === "interessado" || l.status === "reuniao" || l.status === "proposta").length;
   const countNegociacao = leads.filter(l => l.status === "negociacao").length;
-  const countAntigo = leads.filter(l => l.status === "antigo").length;
+  const countAntigo = leads.filter(l => l.status === "fechado").length;
   const [credits, setCredits] = useState<number>(1240);
-  const [dailyQuotaCount, setDailyQuotaCount] = useState<number>(14);
+  const [dailyQuotaCount, setDailyQuotaCount] = useState<number>(0);
   const [notifications, setNotifications] = useState<Array<{ id: string; text: string; type: "success" | "warning" | "info" }>>([]);
   
   // Freemium pricing blocker configurations
@@ -158,7 +246,7 @@ export default function App() {
       const initialPool = 10;
       const consumed = initialPool - pCredits;
       if (consumed === 5) {
-        triggerNotification("💡 Você consumiu 50% dos seus créditos de teste gratuito do MapsLeads!", "info");
+        triggerNotification("💡 Você consumiu 50% dos seus créditos de teste gratuito do AdsHive Prospect!", "info");
       } else if (consumed === 8) {
         triggerNotification("⚠️ Atenção: Você atingiu 80% do seu limite gratuito mensal! Considere reabastecer créditos avulsos ou assinar.", "warning");
       } else if (consumed === 10) {
@@ -195,8 +283,26 @@ export default function App() {
   const [leadsFilter, setLeadsFilter] = useState<"todos" | "sem_site" | "quente" | "nicho">("todos");
   const [nicheSearchQuery, setNicheSearchQuery] = useState<string>("");
 
+  const dummyBlankLead: Lead = {
+    id: "dummy_blank",
+    name: "Nenhum Lead Selecionado",
+    niche: "Nenhum",
+    location: "Nenhum",
+    rating: 0,
+    reviews: 0,
+    hasWebsite: false,
+    hasGmbActive: false,
+    hasPhone: false,
+    phone: "",
+    leadScore: 0,
+    status: "novo",
+    captured: false,
+    gmbAnalysis: "Nenhuma análise disponível. Selecione ou capture um lead para iniciar.",
+    avatarColor: "bg-slate-100 text-slate-400"
+  };
+
   // AI copywriting generator state
-  const [selectedLeadForAI, setSelectedLeadForAI] = useState<Lead>(initialLeads[0]);
+  const [selectedLeadForAI, setSelectedLeadForAI] = useState<Lead>(dummyBlankLead);
   const [selectedChannel, setSelectedChannel] = useState<"WhatsApp" | "E-mail" | "Instagram" | "LinkedIn">("WhatsApp");
   const [selectedGoal, setSelectedGoal] = useState<string>("SEO Local");
   const [selectedTone, setSelectedTone] = useState<string>("Persuasivo");
@@ -230,28 +336,19 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
     if (session) {
       const loadDatabase = async () => {
         try {
-          const querySnapshot = await getDocs(collection(db, "leads"));
-          if (!querySnapshot.empty) {
-            const loadedLeads: Lead[] = [];
-            querySnapshot.forEach((docSnap) => {
-              loadedLeads.push({ id: docSnap.id, ...docSnap.data() } as Lead);
-            });
-            // Preserving state and seeding ref
-            setLeads(loadedLeads);
-            lastSyncLeadsRef.current = loadedLeads;
-          } else {
-            // First run: Seed from initialLeads so a warm CRM welcomes the user
-            for (const item of initialLeads) {
-              await setDoc(doc(db, "leads", item.id), item);
-            }
-            setLeads(initialLeads);
-            lastSyncLeadsRef.current = initialLeads;
-          }
+          const querySnapshot = await getDocs(collection(db, "users", session.id, "leads"));
+          const loadedLeads: Lead[] = [];
+          querySnapshot.forEach((docSnap) => {
+            loadedLeads.push({ id: docSnap.id, ...docSnap.data() } as Lead);
+          });
+          // Set user's own propected leads
+          setLeads(loadedLeads);
+          lastSyncLeadsRef.current = loadedLeads;
         } catch (err) {
           console.error("Erro carregando leads do Firestore:", err);
-          // Safe robust fallback in case of latency or offline state
-          setLeads(initialLeads);
-          lastSyncLeadsRef.current = initialLeads;
+          // Set to empty array for a zeroed slate
+          setLeads([]);
+          lastSyncLeadsRef.current = [];
         }
       };
 
@@ -271,7 +368,7 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
         const prevLead = prevLeads.find(p => p.id === lead.id);
         if (!prevLead || JSON.stringify(prevLead) !== JSON.stringify(lead)) {
           try {
-            await setDoc(doc(db, "leads", lead.id), lead);
+            await setDoc(doc(db, "users", session.id, "leads", lead.id), lead);
           } catch (err) {
             console.error(`Erro replicando lead: ${lead.name}`, err);
           }
@@ -283,7 +380,7 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
         const currentLead = leads.find(l => l.id === prevLead.id);
         if (!currentLead) {
           try {
-            await deleteDoc(doc(db, "leads", prevLead.id));
+            await deleteDoc(doc(db, "users", session.id, "leads", prevLead.id));
           } catch (err) {
             console.error(`Erro deletando lead do Firestore: ${prevLead.name}`, err);
           }
@@ -636,7 +733,7 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
   }
 
   return (
-    <div id="mapsleads-app" className="min-h-screen bg-[#f8f9ff] text-[#0b1c30] flex flex-col font-sans transition-all duration-300 pb-20 lg:pb-0">
+    <div id="adshive-prospect-app" className={`min-h-screen transition-all duration-300 pb-20 lg:pb-0 flex flex-col font-sans theme-${themeMode} ${themeMode === 'light' ? 'bg-[#F8F9FC] text-[#111827]' : 'bg-[#0B0B0F] text-[#FFFFFF]'}`}>
       
       {/* Toast Notification Container */}
       <div id="toast-container" className="fixed top-20 right-6 z-[100] flex flex-col gap-2 pointer-events-none max-w-sm w-full">
@@ -665,28 +762,34 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
       </div>
 
       {/* Top Application Header Navbar */}
-      <header id="topbar-nav" className="fixed top-0 left-0 w-full z-50 bg-white border-b border-slate-200 h-16 flex items-center shadow-sm">
+      <header id="topbar-nav" className={`fixed top-0 left-0 w-full z-50 h-16 flex items-center shadow-sm border-b transition-all duration-300 ${themeMode === 'light' ? 'bg-white border-slate-200 text-slate-800' : 'bg-[#14141B] border-[#2B2B3A] text-white'}`}>
         <div className="w-full max-w-7xl mx-auto px-6 flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <div className="bg-blue-600 text-white p-2 rounded-lg flex items-center justify-center cursor-pointer hover:bg-blue-700 active:scale-95 transition-transform">
-              <Sparkles className="w-5 h-5" />
+            <div className="bg-[#8B2EFF] text-white p-2 rounded-lg flex items-center justify-center cursor-pointer hover:bg-[#9C4DFF] active:scale-95 transition-all shadow-glow-purple">
+              <Sparkles className="w-5 h-5 text-white" />
             </div>
-            <span className="font-extrabold text-xl tracking-tight bg-gradient-to-r from-blue-700 to-indigo-900 bg-clip-text text-transparent">MapsLeads</span>
+            <div className="flex flex-col">
+              <div id="company-logo" className="font-extrabold text-lg tracking-tight leading-none select-none">
+                <span className={themeMode === "light" ? "text-slate-900" : "text-white"}>AdsHive </span>
+                <span className="text-[#8B2EFF]">Prospect</span>
+              </div>
+              <span className={`text-[10px] font-medium tracking-wide mt-0.5 hidden sm:inline ${themeMode === 'light' ? 'text-slate-500' : 'text-[#7A7D8B]'}`}>Prospecção Inteligente Impulsionada por IA</span>
+            </div>
           </div>
 
           {/* Dynamic Indicator Visual (Permanente no topo) */}
-          <div className="hidden lg:flex items-center gap-6 border-l pl-6 border-slate-200">
+          <div className="hidden lg:flex items-center gap-6 border-l pl-6 border-slate-200 dark:border-[#2B2B3A]">
             <div className="flex flex-col">
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Plano Atual</span>
-              <span className="text-xs font-black text-slate-800 flex items-center gap-1">
-                <span className={`w-2 h-2 rounded-full ${session?.email?.toLowerCase() === 'douglasbateriacma@gmail.com' ? 'bg-amber-400 animate-pulse' : (session?.plan || 'Gratuito').toLowerCase() === 'gratuito' ? 'bg-zinc-400' : 'bg-emerald-500 animate-pulse'}`}></span>
+              <span className="text-[10px] text-slate-400 dark:text-[#7A7D8B] font-bold uppercase tracking-wider">Plano Atual</span>
+              <span className={`text-xs font-black flex items-center gap-1 ${themeMode === 'light' ? 'text-slate-800' : 'text-white'}`}>
+                <span className={`w-2 h-2 rounded-full ${session?.email?.toLowerCase() === 'douglasbateriacma@gmail.com' ? 'bg-amber-400 animate-pulse' : (session?.plan || 'Gratuito').toLowerCase() === 'gratuito' ? 'bg-zinc-400' : 'bg-[#8B2EFF] animate-pulse'}`}></span>
                 {session?.email?.toLowerCase() === 'douglasbateriacma@gmail.com' ? 'Unlimited Vitalício (Dev)' : (session?.plan || 'Gratuito')}
               </span>
             </div>
             
             <div className="flex flex-col">
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Leads Restantes</span>
-              <span className="text-xs font-black text-slate-800">
+              <span className="text-[10px] text-slate-400 dark:text-[#7A7D8B] font-bold uppercase tracking-wider">Leads Restantes</span>
+              <span className={`text-xs font-black ${themeMode === 'light' ? 'text-slate-800' : 'text-white'}`}>
                 {session?.email?.toLowerCase() === 'douglasbateriacma@gmail.com' 
                   ? '∞ Ilimitado'
                   : (session?.plan || 'Gratuito').toLowerCase() === 'gratuito'
@@ -697,29 +800,49 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
             </div>
 
             <div className="flex flex-col font-mono text-xs">
-              <span className="text-[10px] text-slate-400 font-sans font-bold uppercase tracking-wider">Créditos Comprados</span>
-              <span className="text-xs font-black text-blue-700">
+              <span className="text-[10px] text-slate-400 dark:text-[#7A7D8B] font-sans font-bold uppercase tracking-wider">Créditos Comprados</span>
+              <span className={`text-xs font-black ${themeMode === 'light' ? 'text-indigo-700' : 'text-[#8B2EFF]'}`}>
                 {session?.email?.toLowerCase() === 'douglasbateriacma@gmail.com' ? '∞ Privilégio Dev' : `+${session?.purchasedCredits || 0} adicionais`}
               </span>
             </div>
           </div>
 
           <div className="flex items-center gap-4">
+            {/* Quick Theme Toggle Command Button: 🌙 Escuro / ☀️ Claro */}
+            <button
+              id="btn-theme-toggle"
+              onClick={() => {
+                const nextTheme = themeMode === "light" ? "dark" : "light";
+                setThemeMode(nextTheme);
+                localStorage.setItem("theme", nextTheme);
+                setAppearanceChoice(nextTheme);
+                localStorage.setItem("appearance_choice", nextTheme);
+                triggerNotification(`Visual alterado para Tema ${nextTheme === 'light' ? 'Claro' : 'Escuro'}!`, "info");
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-all border ${
+                themeMode === "light"
+                  ? "bg-white border-slate-300 hover:bg-slate-50 text-slate-700"
+                  : "bg-[#1C1C26] border-[#2B2B3A] hover:bg-[#2B2B3A] text-white"
+              }`}
+            >
+              {themeMode === "light" ? "🌙 Escuro" : "☀️ Claro"}
+            </button>
+
             {/* Credits badge selector */}
-            <div id="hdr-credits" className="hidden sm:flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-full px-4 py-1">
-              <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
-              <span className="text-xs font-semibold text-blue-800">
+            <div id="hdr-credits" className={`hidden sm:flex items-center gap-2 border rounded-full px-4 py-1.5 ${themeMode === 'light' ? 'bg-indigo-50/50 border-indigo-100 text-indigo-900' : 'bg-[#1C1C26] border-[#2B2B3A] text-[#B0B3C1]'}`}>
+              <span className="w-2 h-2 rounded-full bg-[#8B2EFF] animate-pulse"></span>
+              <span className="text-xs font-bold">
                 {session?.email?.toLowerCase() === 'douglasbateriacma@gmail.com' ? 'Créditos Ilimitados' : `${credits} créditos de prospecção`}
               </span>
             </div>
 
-            <div className="flex items-center gap-3 border-l pl-4 border-slate-200">
+            <div className="flex items-center gap-3 border-l pl-4 border-slate-200 dark:border-[#2B2B3A]">
               {/* User badge */}
               <div 
                 onClick={() => setActiveTab("admin")}
                 className="flex flex-col text-right hidden md:block cursor-pointer hover:opacity-85"
               >
-                <span className="text-sm font-bold text-slate-800">{managerName}</span>
+                <span className={`text-sm font-bold ${themeMode === 'light' ? 'text-slate-800' : 'text-white'}`}>{managerName}</span>
                 <span className="text-[11px] text-slate-500 font-semibold tracking-wider uppercase">{managerBusiness}</span>
               </div>
               <div 
@@ -741,15 +864,15 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
       <div className="flex flex-1 pt-16 min-h-[calc(100vh-4rem)]">
         
         {/* Dynamic Sidebar navigation for Desktop users */}
-        <aside id="desktop-sidebar-nav" className="hidden lg:flex fixed left-0 top-16 h-full w-[280px] bg-slate-50 border-r border-slate-200 flex-col py-6 px-4 z-40">
+        <aside id="desktop-sidebar-nav" className={`hidden lg:flex fixed left-0 top-16 h-full w-[280px] flex-col py-6 px-4 z-40 border-r transition-all duration-300 ${themeMode === 'light' ? 'bg-slate-50 border-slate-200 text-slate-800' : 'bg-[#0B0B0F] border-[#2B2B3A] text-white'}`}>
           <div className="px-3 mb-6">
-            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+            <div className={`border rounded-xl p-4 shadow-sm transition-all duration-300 ${themeMode === 'light' ? 'bg-white border-slate-200' : 'bg-[#1C1C26] border-[#2B2B3A] shadow-glow-purple'}`}>
               <p className="text-[10px] font-bold text-slate-400 tracking-wider uppercase mb-1">Plano Atual</p>
-              <h4 className="text-sm font-bold text-slate-800">{managerRole}</h4>
-              <div className="w-full bg-slate-100 h-2 rounded-full mt-2 overflow-hidden flex">
-                <div className="bg-blue-600 h-full rounded-full transition-all duration-500" style={{ width: "75%" }}></div>
+              <h4 className={`text-sm font-black ${themeMode === 'light' ? 'text-slate-800' : 'text-white'}`}>{managerRole}</h4>
+              <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full mt-2 overflow-hidden flex">
+                <div className="bg-[#8B2EFF] h-full rounded-full transition-all duration-500" style={{ width: "75%" }}></div>
               </div>
-              <p className="text-[11px] text-slate-500 mt-1.5 font-medium">{dailyQuotaCount * 12}/1000 leads obtidos</p>
+              <p className="text-[11px] text-slate-500 dark:text-[#B0B3C1] mt-1.5 font-medium">{dailyQuotaCount * 12}/1000 leads obtidos</p>
             </div>
           </div>
 
@@ -757,11 +880,7 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
             <button 
               id="sidebar-tab-inicio"
               onClick={() => setActiveTab("inicio")} 
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-bold text-sm transition-all text-left ${
-                activeTab === "inicio" 
-                  ? "bg-blue-50 text-blue-700 border-l-4 border-blue-600" 
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-bold text-sm transition-all text-left ${getSidebarBtnClass("inicio")}`}
             >
               <LayoutDashboard className="w-5 h-5 shrink-0" />
               <span>Visão Geral</span>
@@ -770,11 +889,7 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
             <button 
               id="sidebar-tab-pesquisa"
               onClick={() => setActiveTab("pesquisa")} 
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-bold text-sm transition-all text-left ${
-                activeTab === "pesquisa" 
-                  ? "bg-blue-50 text-blue-700 border-l-4 border-blue-600" 
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-bold text-sm transition-all text-left ${getSidebarBtnClass("pesquisa")}`}
             >
               <Search className="w-5 h-5 shrink-0" />
               <span>Pesquisa Maps</span>
@@ -783,11 +898,7 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
             <button 
               id="sidebar-tab-leads"
               onClick={() => setActiveTab("leads")} 
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-bold text-sm transition-all text-left ${
-                activeTab === "leads" 
-                  ? "bg-blue-50 text-blue-700 border-l-4 border-blue-600" 
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-bold text-sm transition-all text-left ${getSidebarBtnClass("leads")}`}
             >
               <Users className="w-5 h-5 shrink-0" />
               <span>Gestão de Leads</span>
@@ -796,11 +907,7 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
             <button 
               id="sidebar-tab-oportunidades"
               onClick={() => setActiveTab("oportunidades")} 
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-bold text-sm transition-all text-left ${
-                activeTab === "oportunidades" 
-                  ? "bg-blue-50 text-blue-700 border-l-4 border-blue-600" 
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-bold text-sm transition-all text-left ${getSidebarBtnClass("oportunidades")}`}
             >
               <Flame className="w-5 h-5 shrink-0" />
               <span>Oportunidades</span>
@@ -809,16 +916,12 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
             <button 
               id="sidebar-tab-crm"
               onClick={() => setActiveTab("crm")} 
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-bold text-sm transition-all text-left ${
-                activeTab === "crm" 
-                  ? "bg-blue-50 text-blue-700 border-l-4 border-blue-600 font-extrabold" 
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-bold text-sm transition-all text-left ${getSidebarBtnClass("crm")}`}
             >
               <Users2 className="w-5 h-5 shrink-0" />
               <span className="flex items-center gap-1.5">
                 <span>Kanban CRM</span>
-                <span className="bg-blue-100 text-blue-800 text-[9px] px-1.5 py-0.2 rounded font-black uppercase">Novo</span>
+                <span className="bg-[#8B2EFF]/20 text-[#8B2EFF] text-[9px] px-1.5 py-0.2 rounded font-black uppercase">Novo</span>
               </span>
             </button>
 
@@ -828,11 +931,7 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
                 if (isFeaturePremiumRestricted("Radar Digital Avançado")) return;
                 setActiveTab("radar");
               }} 
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-bold text-sm transition-all text-left ${
-                activeTab === "radar" 
-                  ? "bg-blue-50 text-blue-700 border-l-4 border-blue-600 font-extrabold" 
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-bold text-sm transition-all text-left ${getSidebarBtnClass("radar")}`}
             >
               <Activity className="w-5 h-5 shrink-0" />
               <span>Radar Digital</span>
@@ -841,24 +940,16 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
             <button 
               id="sidebar-tab-comercial"
               onClick={() => setActiveTab("comercial")} 
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-bold text-sm transition-all text-left ${
-                activeTab === "comercial" 
-                  ? "bg-blue-50 text-blue-700 border-l-4 border-blue-600 font-extrabold" 
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-bold text-sm transition-all text-left ${getSidebarBtnClass("comercial")}`}
             >
               <DollarSign className="w-5 h-5 shrink-0" />
-              <span>Painel Comercial</span>
+              <span>Painel e Financeiro</span>
             </button>
 
             <button 
               id="sidebar-tab-ai"
               onClick={() => setActiveTab("ai_gerador")} 
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-bold text-sm transition-all text-left ${
-                activeTab === "ai_gerador" 
-                  ? "bg-blue-50 text-blue-700 border-l-4 border-blue-600" 
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-bold text-sm transition-all text-left ${getSidebarBtnClass("ai_gerador")}`}
             >
               <Sparkles className="w-5 h-5 shrink-0" />
               <span>Gerador de Mensagem IA</span>
@@ -867,36 +958,48 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
             <button 
               id="sidebar-tab-loja-creditos"
               onClick={() => setActiveTab("loja_creditos")} 
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-bold text-sm transition-all text-left ${
-                activeTab === "loja_creditos" 
-                  ? "bg-amber-50 text-amber-700 border-l-4 border-amber-500 font-extrabold" 
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-bold text-sm transition-all text-left ${getSidebarBtnClass("loja_creditos")}`}
             >
-              <Coins className="w-5 h-5 shrink-0 text-amber-500 animate-pulse" />
+              <Coins className={`w-5 h-5 shrink-0 ${themeMode === 'light' ? 'text-amber-600' : 'text-amber-400'} animate-pulse`} />
               <span className="flex items-center gap-1.5">
                 <span>Comprar Créditos</span>
-                <span className="bg-amber-100 text-amber-850 text-[8px] px-1.5 py-0.5 rounded font-black uppercase">Promo</span>
+                <span className="bg-amber-100 text-amber-800 text-[8px] px-1.5 py-0.5 rounded font-black uppercase">Promo</span>
               </span>
             </button>
 
             <button 
               id="sidebar-tab-admin"
               onClick={() => setActiveTab("admin")} 
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-bold text-sm transition-all text-left ${
-                activeTab === "admin" 
-                  ? "bg-blue-50 text-blue-700 border-l-4 border-blue-600" 
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-bold text-sm transition-all text-left ${getSidebarBtnClass("admin")}`}
             >
               <Settings className="w-5 h-5 shrink-0" />
               <span>Configurações Admin</span>
             </button>
+
+            {session?.email?.toLowerCase() === "douglasbateriacma@gmail.com" && (
+              <button 
+                id="sidebar-tab-owner"
+                onClick={() => setActiveTab("dashboard-owner")} 
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg font-bold text-sm transition-all text-left ${
+                  activeTab === "dashboard-owner" 
+                    ? "bg-[#C93CFF]/10 text-[#C93CFF] border-l-4 border-[#C93CFF] font-black" 
+                    : themeMode === "light"
+                      ? "text-rose-600 hover:bg-rose-50"
+                      : "text-rose-400 hover:bg-[#1C1C26]"
+                }`}
+              >
+                <ShieldAlert className="w-5 h-5 shrink-0 text-red-500 animate-pulse" />
+                <span>Painel Owner Master</span>
+              </button>
+            )}
           </nav>
 
-          <div className="pt-4 border-t border-slate-200 mt-auto pb-4 px-3 flex justify-between items-center text-[11px] text-slate-400 font-medium">
-            <span>MapsLeads v1.6.2</span>
-            <span>Premium Server Active</span>
+          <div className="pt-4 border-t border-slate-200 dark:border-[#2B2B3A] mt-auto pb-4 px-3 flex justify-between items-center text-[11px] text-slate-400 dark:text-[#7A7D8B] font-medium">
+            <span>AdsHive Prospect v1.6.2</span>
+            <span className="flex items-center gap-1.5 font-bold text-emerald-500">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>Online</span>
+            </span>
           </div>
         </aside>
 
@@ -932,11 +1035,10 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
                     <div className="bg-blue-50 p-3 rounded-xl text-blue-600 group-hover:scale-110 transition-transform">
                       <Globe className="w-6 h-6" />
                     </div>
-                    <span className="text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full text-xs font-bold font-mono">+12%</span>
                   </div>
                   <div className="mt-4">
                     <p className="text-[11px] font-bold text-slate-400 tracking-widest uppercase">Total de Empresas</p>
-                    <p className="text-3xl font-extrabold text-slate-800 tracking-tight mt-1">12.480</p>
+                    <p className="text-3xl font-extrabold text-slate-800 tracking-tight mt-1">{leads.length}</p>
                   </div>
                 </div>
 
@@ -952,7 +1054,7 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
                   </div>
                   <div className="mt-4">
                     <p className="text-[11px] font-bold text-slate-400 tracking-widest uppercase">Empresas Sem Site</p>
-                    <p className="text-3xl font-extrabold text-slate-800 tracking-tight mt-1">3.120</p>
+                    <p className="text-3xl font-extrabold text-slate-800 tracking-tight mt-1">{leads.filter(l => !l.hasWebsite).length}</p>
                   </div>
                 </div>
 
@@ -966,7 +1068,7 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
                   </div>
                   <div className="mt-4">
                     <p className="text-[11px] font-bold text-slate-400 tracking-widest uppercase">Leads Quentes</p>
-                    <p className="text-3xl font-extrabold text-slate-800 tracking-tight mt-1">142</p>
+                    <p className="text-3xl font-extrabold text-slate-800 tracking-tight mt-1">{leads.filter(l => l.leadScore >= 85).length}</p>
                   </div>
                 </div>
 
@@ -980,7 +1082,7 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
                   </div>
                   <div className="mt-4">
                     <p className="text-[11px] font-bold text-slate-400 tracking-widest uppercase">Clientes Fechados</p>
-                    <p className="text-3xl font-extrabold text-slate-800 tracking-tight mt-1">84</p>
+                    <p className="text-3xl font-extrabold text-slate-800 tracking-tight mt-1">{leads.filter(l => l.status === "fechado").length}</p>
                   </div>
                 </div>
 
@@ -1293,37 +1395,43 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
                   <form onSubmit={handleSearchLeads} className="space-y-6">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                       
-                      {/* Nicho input */}
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-[11px] font-bold text-slate-400 tracking-wider uppercase">Nicho de Atuação</label>
-                        <div className="relative">
-                          <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-                          <input 
-                            type="text" 
-                            value={searchNiche} 
-                            onChange={(e) => setSearchNiche(e.target.value)} 
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-11 pr-4 font-bold text-sm text-slate-800 focus:bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all outline-none" 
-                            placeholder="Ex: Adega, Pet Shop, Dentista, Informática, Oficina..."
-                          />
+                        {/* Nicho input */}
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-[11px] font-bold text-slate-400 tracking-wider uppercase">Nicho de Atuação</label>
+                          <div className="relative">
+                            <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+                            <input 
+                              type="text" 
+                              value={searchNiche} 
+                              onChange={(e) => setSearchNiche(e.target.value)} 
+                              list="niche-options"
+                              className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-11 pr-4 font-bold text-sm text-slate-800 focus:bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all outline-none" 
+                              placeholder="Selecione da lista ou digite o nicho de sua escolha..."
+                            />
+                            <datalist id="niche-options">
+                              {["Padaria", "Pet Shop", "Oficina Mecânica", "Dentista", "Restaurante", "Salão de Beleza", "Imobiliária", "Clínica Estética", "Academia", "Advogado", "Contabilidade", "Vidraçaria", "Farmácia", "Sorveteria", "Pizzaria", "Consultório Médico", "Autoescola", "Gráfica", "Arquitetura", "Ar Condicionado", "Fotografia", "Chaveiro", "Barbearia", "Floricultura", "Material de Construção", "Clínica Veterinária", "Escola de Idiomas", "Serralheria", "Bandeirantes"].map(n => (
+                                <option key={n} value={n}>{n}</option>
+                              ))}
+                            </datalist>
+                          </div>
+                          {/* Quick tags suggestions */}
+                          <div className="flex flex-wrap gap-1 mt-1.5 max-h-24 overflow-y-auto p-1 bg-slate-50/50 rounded-xl border border-slate-100">
+                            {["Padaria", "Pet Shop", "Oficina Mecânica", "Dentista", "Restaurante", "Salão de Beleza", "Imobiliária", "Clínica Estética", "Academia", "Advogado", "Contabilidade", "Vidraçaria", "Farmácia", "Sorveteria", "Pizzaria", "Barbearia", "Bandeirantes"].map(tag => (
+                              <button
+                                key={tag}
+                                type="button"
+                                onClick={() => setSearchNiche(tag)}
+                                className={`text-[10px] font-bold px-2 py-1 rounded-md transition-colors cursor-pointer ${
+                                  searchNiche === tag 
+                                    ? "bg-blue-600 text-white" 
+                                    : "bg-slate-105 text-slate-500 hover:bg-slate-200"
+                                }`}
+                              >
+                                {tag}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                        {/* Quick tags suggestions */}
-                        <div className="flex flex-wrap gap-1 mt-1.5">
-                          {["Padaria", "Pet Shop", "Oficina Mecânica", "Dentista", "Restaurante"].map(tag => (
-                            <button
-                              key={tag}
-                              type="button"
-                              onClick={() => setSearchNiche(tag)}
-                              className={`text-[10px] font-bold px-2 py-1 rounded-md transition-colors ${
-                                searchNiche === tag 
-                                  ? "bg-blue-600 text-white" 
-                                  : "bg-slate-100 text-slate-500 hover:bg-slate-200"
-                              }`}
-                            >
-                              {tag}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
 
                       {/* Localização input */}
                       <div className="flex flex-col gap-1.5">
@@ -1850,7 +1958,7 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
                     <button 
                       onClick={(e) => {
                         e.stopPropagation();
-                        startAIWithLead(initialLeads[0]);
+                        startAIWithLead(leads[0] || dummyBlankLead);
                       }}
                       className="bg-blue-600 text-white hover:bg-blue-700 py-2.5 px-4 rounded-xl font-bold text-xs active:scale-95 transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
                     >
@@ -2130,6 +2238,17 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
             </div>
           )}
 
+          {/* TAB: OWNER DASHBOARD */}
+          {activeTab === "dashboard-owner" && (
+            <div id="tab-owner-dashboard-view" className="space-y-8 animate-in fade-in duration-300">
+              <OwnerDashboard 
+                session={session} 
+                triggerNotification={triggerNotification} 
+                onClose={() => setActiveTab("inicio")} 
+              />
+            </div>
+          )}
+
           {/* TAB 6: CONFIGURAÇÕES ADMIN */}
           {activeTab === "admin" && (
             <div id="tab-admin-view" className="space-y-8 animate-in fade-in duration-300">
@@ -2156,16 +2275,18 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
                 >
                   Perfil Profissional & IA
                 </button>
-                <button 
-                  onClick={() => setAdminSubTab("creditos")}
-                  className={`pb-3 text-sm font-bold border-b-2 transition-all ${adminSubTab === "creditos" ? "border-blue-600 text-blue-600 font-extrabold" : "border-transparent text-slate-500 hover:text-slate-800"}`}
-                >
-                  Gestão Comercial de Créditos & Métricas
-                </button>
+                {session?.email?.toLowerCase() === "douglasbateriacma@gmail.com" && (
+                  <button 
+                    onClick={() => setAdminSubTab("creditos")}
+                    className={`pb-3 text-sm font-bold border-b-2 transition-all ${adminSubTab === "creditos" ? "border-blue-600 text-blue-600 font-extrabold" : "border-transparent text-slate-500 hover:text-slate-800"}`}
+                  >
+                    Gestão Comercial de Créditos & Métricas
+                  </button>
+                )}
               </div>
 
-              {adminSubTab === "creditos" && (
-                <AdminCredits triggerNotification={triggerNotification} />
+              {adminSubTab === "creditos" && session?.email?.toLowerCase() === "douglasbateriacma@gmail.com" && (
+                <AdminCredits session={session} triggerNotification={triggerNotification} />
               )}
 
               {adminSubTab === "perfil" &&
@@ -2226,7 +2347,7 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
                           value={managerBusiness}
                           onChange={(e) => setManagerBusiness(e.target.value)}
                           className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 font-bold text-xs text-slate-800 focus:bg-white focus:ring-2 focus:ring-blue-100 outline-none"
-                          placeholder="Ex: MapsLeads Pro"
+                          placeholder="Ex: AdsHive Prospect Pro"
                           required
                         />
                       </div>
@@ -2266,7 +2387,7 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
                         value={managerSignature}
                         onChange={(e) => setManagerSignature(e.target.value)}
                         className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 font-bold text-xs text-slate-800 focus:bg-white focus:ring-2 focus:ring-blue-100 outline-none"
-                        placeholder="Ex: Douglas - Head de Soluções Locais na MapsLeads"
+                        placeholder="Ex: Douglas - Head de Soluções Locais na AdsHive Prospect"
                         required
                       />
                     </div>
@@ -2278,10 +2399,10 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
                           if (confirm("Deseja redefinir os dados para os padrões de sistema?")) {
                             setManagerName("Douglas CMA");
                             setManagerRole("Vendedor Sênior");
-                            setManagerBusiness("MapsLeads Pro");
+                            setManagerBusiness("AdsHive Prospect Pro");
                             setManagerPhone("+55 (11) 99876-5432");
                             setManagerEmail("douglasbateriacma@gmail.com");
-                            setManagerSignature("Douglas - CEO na MapsLeads Consultoria");
+                            setManagerSignature("Douglas - CEO na AdsHive Prospect Consultoria");
                             localStorage.removeItem("manager_name");
                             localStorage.removeItem("manager_role");
                             localStorage.removeItem("manager_company");
@@ -2396,6 +2517,59 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
                     </div>
                   </div>
 
+                  {/* Aparência do Sistema - Custom Premium Widget */}
+                  <div className={`border p-6 rounded-3xl shadow-sm space-y-4 transition-all duration-300 ${themeMode === 'light' ? 'bg-white border-slate-200 text-slate-800' : 'bg-[#1C1C26] border-[#2B2B3A] text-white shadow-glow-purple'}`}>
+                    <div>
+                      <h3 className={`font-black text-sm flex items-center gap-2 ${themeMode === 'light' ? 'text-slate-800' : 'text-white'}`}>
+                        <span>🎨</span>
+                        <span>Aparência & Interface</span>
+                      </h3>
+                      <p className={`text-[11px] font-semibold mt-0.5 ${themeMode === 'light' ? 'text-slate-400' : 'text-[#7A7D8B]'}`}>Estilize o seu ambiente AdsHive Prospect para otimizar foco e conforto visual.</p>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2">
+                      <button 
+                        type="button"
+                        onClick={() => handleAppearanceChange("dark")}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                          appearanceChoice === "dark" 
+                            ? "bg-[#8B2EFF] text-white border-[#8B2EFF] shadow-glow-purple" 
+                            : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 dark:bg-[#14141B] dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-900/80"
+                        }`}
+                      >
+                        🌙 Escuro
+                      </button>
+
+                      <button 
+                        type="button"
+                        onClick={() => handleAppearanceChange("light")}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                          appearanceChoice === "light" 
+                            ? "bg-[#8B2EFF] text-white border-[#8B2EFF] shadow-glow-purple" 
+                            : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 dark:bg-[#14141B] dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-900/80"
+                        }`}
+                      >
+                        ☀️ Claro
+                      </button>
+
+                      <button 
+                        type="button"
+                        onClick={() => handleAppearanceChange("system")}
+                        className={`py-2 px-2.5 rounded-xl text-[11px] font-bold transition-all border cursor-pointer ${
+                          appearanceChoice === "system" 
+                            ? "bg-[#8B2EFF] text-white border-[#8B2EFF] shadow-glow-purple" 
+                            : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 dark:bg-[#14141B] dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-900/80"
+                        }`}
+                      >
+                        🖥️ Sistema
+                      </button>
+                    </div>
+
+                    <div className={`text-[10px] font-medium leading-relaxed p-2.5 rounded-xl border ${themeMode === 'light' ? 'bg-slate-50 border-slate-100 text-slate-400' : 'bg-[#14141B]/50 border-slate-800 text-[#7A7D8B]'}`}>
+                      O modo padrão é o <strong className={themeMode === 'light' ? 'text-black' : 'text-white'}>Dark Mode</strong> premium. Suas preferências de tema são sincronizadas localmente no cache do seu navegador e persistidas instantaneamente no <code className="text-[#8B2EFF] font-black">localStorage.theme</code> para as próximas visitas.
+                    </div>
+                  </div>
+
                 </div>
               </div>
               }
@@ -2438,7 +2612,7 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
           {activeTab === "comercial" && (
             <div id="tab-comercial-view" className="space-y-6 animate-in fade-in duration-300">
               <div>
-                <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Painel Comercial & Monetização</h2>
+                <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Painel e Financeiro</h2>
                 <p className="text-slate-500 mt-1">Acompanhe MRR de suporte, funis automáticos de follow-up e assinaturas integradas.</p>
               </div>
               <ComercialDash 
@@ -2492,7 +2666,7 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
 
             <div className="space-y-2">
               <span className="text-[10px] font-black tracking-widest text-blue-600 uppercase">Limite Atingido • Plano Gratuito</span>
-              <h3 className="text-2xl font-black text-slate-900 tracking-tight">Liberte o Potencial do MapsLeads!</h3>
+              <h3 className="text-2xl font-black text-slate-900 tracking-tight">Liberte o Potencial do AdsHive Prospect!</h3>
               <p className="text-slate-500 text-sm leading-relaxed max-w-sm mx-auto font-medium">
                 Seu saldo de testes acabou. Faça o upgrade de seu plano comercial ou compre créditos avulsos para continuar extraindo leads e gerando mensagens com inteligência artificial.
               </p>
@@ -2550,11 +2724,11 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
 
       {/* Dynamic Profile Detailed Modal Overlay Popup */}
       {selectedLeadProfile && (
-        <div id="modal-lead-profile" className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl w-full max-w-2xl border shadow-2xl relative overflow-hidden flex flex-col">
+        <div id="modal-lead-profile" className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl w-full max-w-2xl border shadow-2xl relative overflow-hidden flex flex-col max-h-[90vh]">
             
             {/* Modal top overlay panel banner */}
-            <div className="bg-gradient-to-tr from-slate-900 to-indigo-950 text-white p-6 relative">
+            <div className="bg-gradient-to-tr from-slate-900 to-indigo-950 text-white p-6 relative shrink-0">
               <button 
                 id="btn-close-modal"
                 onClick={() => setSelectedLeadProfile(null)}
@@ -2575,7 +2749,7 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
             </div>
 
             {/* Modal contents */}
-            <div className="p-6 space-y-6">
+            <div className="p-6 space-y-6 overflow-y-auto flex-1">
               
               {/* Gap Analysis Box */}
               <div className="space-y-2">
@@ -2849,7 +3023,7 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
             </div>
 
             {/* Modal actions footer */}
-            <div className="p-6 bg-slate-50 border-t flex flex-wrap justify-end gap-2">
+            <div className="p-6 bg-slate-50 border-t flex flex-wrap justify-end gap-2 shrink-0">
               <button 
                 onClick={() => setSelectedLeadProfile(null)}
                 className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-4 py-2.5 rounded-xl text-xs active:scale-95 transition-colors cursor-pointer"
@@ -2897,68 +3071,68 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
       )}
 
       {/* Persistent Bottom Mobile Navigation Bar */}
-      <nav id="mobile-bottom-nav" className="lg:hidden fixed bottom-0 left-0 w-full flex justify-around items-center py-2 bg-white border-t border-slate-200 shadow-xl z-50">
+      <nav id="mobile-bottom-nav" className={`lg:hidden fixed bottom-0 left-0 w-full flex justify-around items-center py-2 border-t shadow-xl z-50 transition-all duration-300 ${themeMode === 'light' ? 'bg-white border-slate-200 text-slate-800' : 'bg-[#14141B] border-[#2B2B3A] text-white'}`}>
         
         <button 
           onClick={() => setActiveTab("inicio")} 
           className={`flex flex-col items-center justify-center py-1.5 px-3 rounded-xl transition-all cursor-pointer ${
-            activeTab === "inicio" ? "text-blue-600" : "text-slate-400 hover:text-slate-600"
+            activeTab === "inicio" ? "text-[#8B2EFF]" : "text-slate-400 hover:text-slate-600 dark:hover:text-white"
           }`}
         >
           <LayoutDashboard className="w-5 h-5 shrink-0" />
           <span className="text-[10px] font-bold mt-1">Início</span>
         </button>
-
+ 
         <button 
           onClick={() => setActiveTab("pesquisa")} 
           className={`flex flex-col items-center justify-center py-1.5 px-3 rounded-xl transition-all cursor-pointer ${
-            activeTab === "pesquisa" ? "text-blue-600" : "text-slate-400 hover:text-slate-600"
+            activeTab === "pesquisa" ? "text-[#8B2EFF]" : "text-slate-400 hover:text-slate-600 dark:hover:text-white"
           }`}
         >
           <Search className="w-5 h-5 shrink-0" />
           <span className="text-[10px] font-bold mt-1 font-sans">Pesquisa</span>
         </button>
-
+ 
         <button 
           onClick={() => setActiveTab("leads")} 
           className={`flex flex-col items-center justify-center py-1.5 px-3 rounded-xl transition-all cursor-pointer ${
-            activeTab === "leads" ? "text-blue-600" : "text-slate-400 hover:text-slate-600"
+            activeTab === "leads" ? "text-[#8B2EFF]" : "text-slate-400 hover:text-slate-600 dark:hover:text-white"
           }`}
         >
           <Users className="w-5 h-5 shrink-0" />
           <span className="text-[10px] font-bold mt-1">Leads</span>
         </button>
-
+ 
         <button 
           onClick={() => setActiveTab("oportunidades")} 
           className={`flex flex-col items-center justify-center py-1.5 px-3 rounded-xl transition-all cursor-pointer ${
-            activeTab === "oportunidades" ? "text-blue-600" : "text-slate-400 hover:text-slate-600"
+            activeTab === "oportunidades" ? "text-[#8B2EFF]" : "text-slate-400 hover:text-slate-600 dark:hover:text-white"
           }`}
         >
           <Flame className="w-5 h-5 shrink-0 animate-pulse" />
           <span className="text-[10px] font-bold mt-1">Oportunidades</span>
         </button>
-
+ 
         <button 
           onClick={() => setActiveTab("ai_gerador")} 
           className={`flex flex-col items-center justify-center py-1.5 px-2 rounded-xl transition-all cursor-pointer ${
-            activeTab === "ai_gerador" ? "text-blue-600" : "text-slate-400 hover:text-slate-600"
+            activeTab === "ai_gerador" ? "text-[#8B2EFF]" : "text-slate-400 hover:text-slate-600 dark:hover:text-white"
           }`}
         >
           <Sparkles className="w-5 h-5 shrink-0" />
           <span className="text-[10px] font-bold mt-1">IA Pitch</span>
         </button>
-
+ 
         <button 
           onClick={() => setActiveTab("admin")} 
           className={`flex flex-col items-center justify-center py-1.5 px-2 rounded-xl transition-all cursor-pointer ${
-            activeTab === "admin" ? "text-blue-600" : "text-slate-400 hover:text-slate-600"
+            activeTab === "admin" ? "text-[#8B2EFF]" : "text-slate-400 hover:text-slate-600 dark:hover:text-white"
           }`}
         >
           <Settings className="w-5 h-5 shrink-0" />
           <span className="text-[10px] font-bold mt-1">Admin</span>
         </button>
-
+ 
       </nav>
 
       {/* Persistent AI Business Advisor Copilot Floating Button Drawer */}

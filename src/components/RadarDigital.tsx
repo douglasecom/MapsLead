@@ -148,9 +148,7 @@ export const RadarDigital: React.FC<RadarDigitalProps> = ({ leads, triggerNotifi
             </div>
           </div>
 
-          <p className="text-[10px] font-bold text-slate-500 text-center uppercase tracking-widest border-t border-white/5 pt-4 mt-6">
-            MÓDULO 8: ALGORITMO INTEGRADO
-          </p>
+
         </div>
 
         {/* Audit reports analysis details (MODULE 5 & 6) */}
