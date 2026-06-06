@@ -26,6 +26,11 @@ export const Financeiro: React.FC<FinanceiroProps> = ({ session, triggerNotifica
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [paymentSuccess, setPaymentSuccess] = useState<boolean>(false);
 
+  // New states for interactive simulated Asaas gate
+  const [pendingCreditsPack, setPendingCreditsPack] = useState<any | null>(null);
+  const [pixCodeGenerated, setPixCodeGenerated] = useState<string | null>(null);
+  const [pixQrUrl, setPixQrUrl] = useState<string | null>(null);
+
   // Credit Card fields
   const [cardNumber, setCardNumber] = useState("");
   const [cardName, setCardName] = useState("");
@@ -74,7 +79,7 @@ export const Financeiro: React.FC<FinanceiroProps> = ({ session, triggerNotifica
         }
       });
       // Sort payments by date DESC
-      listPay.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      listPay.sort((a, b) => (b.date ? new Date(b.date).getTime() : 0) - (a.date ? new Date(a.date).getTime() : 0));
       setPayments(listPay);
 
     } catch (err: any) {
@@ -101,68 +106,91 @@ export const Financeiro: React.FC<FinanceiroProps> = ({ session, triggerNotifica
     }
 
     setIsProcessing(true);
+    setPaymentSuccess(false);
     triggerNotification(`Iniciando transação segura Asaas de R$ ${currentPack.price},00...`, "info");
 
-    setTimeout(async () => {
-      try {
-        const userRef = doc(db, "users", session.id);
-        const userSnap = await getDoc(userRef);
-        let previousCredits = 0;
-        let purchasedCredits = 0;
-        let planCredits = 0;
-        let bonusCredits = 0;
-
-        if (userSnap.exists()) {
-          const ud = userSnap.data();
-          previousCredits = ud.credits || 0;
-          purchasedCredits = ud.purchasedCredits || 0;
-          planCredits = ud.planCredits || 0;
-          bonusCredits = ud.bonusCredits || 0;
-        }
-
-        const addedCredits = currentPack.credits;
-        const newTotalCredits = previousCredits + addedCredits;
-        const newPurchased = purchasedCredits + addedCredits;
-
-        // Perform Firestore update
-        await setDoc(userRef, {
-          credits: newTotalCredits,
-          purchasedCredits: newPurchased,
-          remainingCredits: planCredits + newPurchased + bonusCredits
-        }, { merge: true });
-
-        // Save payment history record
-        const payId = `pay_cre_${Date.now().toString(36)}`;
-        await setDoc(doc(db, "payments", payId), {
-          id: payId,
-          userId: session.id,
-          teamId: session.id,
-          date: new Date().toISOString(),
-          amount: currentPack.price,
-          method: paymentMethod,
-          status: "RECEIVED",
-          link: "https://sandbox.asaas.com/payment/" + payId
-        });
-
-        // Add activity log
-        await setDoc(doc(db, "activityLogs", `log_${Date.now()}`), {
-          id: `log_${Date.now()}`,
-          userId: session.id,
-          userName: session.name || "Cliente",
-          action: "COMPRA_CREDITOS",
-          details: `Compra do pacote avulso de ${addedCredits} créditos (faturamento R$ ${currentPack.price.toFixed(2)}) via gateway de pagamentos Asaas.`,
-          createdAt: new Date().toISOString()
-        });
-
-        triggerNotification(`Compra concedida! Adicionado ${addedCredits} créditos com sucesso.`, "success");
-        setPaymentSuccess(true);
-        setIsProcessing(false);
-        loadFinancialData();
-      } catch (err: any) {
-        triggerNotification(`Erro ao gravar créditos: ${err.message}`, "warning");
-        setIsProcessing(false);
+    setTimeout(() => {
+      setPendingCreditsPack(currentPack);
+      if (paymentMethod === "pix") {
+        const dummyPix = "00020126580014BR.GOV.BCB.PIX013660f7dfda-6111-477c-a49d-fb7486e0" + Math.floor(Math.random() * 90000 + 10000);
+        setPixCodeGenerated(dummyPix);
+        setPixQrUrl(`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=simulate_credits_pix_${currentPack.id}`);
+        triggerNotification("Chave PIX gerada via Asaas API. Pague para validar.", "info");
+      } else if (paymentMethod === "boleto") {
+        triggerNotification("Boleto bancário emitido via Asaas API. Efetue o pagamento sim.", "info");
+      } else {
+        triggerNotification("Transação de Cartão de Crédito pré-autorizada via Asaas. Confirme abaixo.", "info");
       }
-    }, 1500);
+      setIsProcessing(false);
+    }, 1200);
+  };
+
+  const handleConfirmCreditsPaymentSimulated = async () => {
+    if (!session || !pendingCreditsPack) return;
+    setIsProcessing(true);
+    triggerNotification("Compensando faturamento Asaas no Banco Central...", "info");
+
+    try {
+      const userRef = doc(db, "users", session.id);
+      const userSnap = await getDoc(userRef);
+      let previousCredits = 0;
+      let purchasedCredits = 0;
+      let planCredits = 0;
+      let bonusCredits = 0;
+
+      if (userSnap.exists()) {
+        const ud = userSnap.data();
+        previousCredits = ud.credits || 0;
+        purchasedCredits = ud.purchasedCredits || 0;
+        planCredits = ud.planCredits || 0;
+        bonusCredits = ud.bonusCredits || 0;
+      }
+
+      const addedCredits = pendingCreditsPack.credits;
+      const newTotalCredits = previousCredits + addedCredits;
+      const newPurchased = purchasedCredits + addedCredits;
+
+      // Perform Firestore update
+      await setDoc(userRef, {
+        credits: newTotalCredits,
+        purchasedCredits: newPurchased,
+        remainingCredits: planCredits + newPurchased + bonusCredits
+      }, { merge: true });
+
+      // Save payment history record
+      const payId = `pay_cre_${Date.now().toString(36)}`;
+      await setDoc(doc(db, "payments", payId), {
+        id: payId,
+        userId: session.id,
+        teamId: session.id,
+        date: new Date().toISOString(),
+        amount: pendingCreditsPack.price,
+        method: paymentMethod,
+        status: "RECEIVED",
+        link: "https://sandbox.asaas.com/payment/" + payId
+      });
+
+      // Add activity log
+      await setDoc(doc(db, "activityLogs", `log_${Date.now()}`), {
+        id: `log_${Date.now()}`,
+        userId: session.id,
+        userName: session.name || "Cliente",
+        action: "COMPRA_CREDITOS",
+        details: `Compra do pacote avulso de ${addedCredits} créditos (faturamento R$ ${pendingCreditsPack.price.toFixed(2)}) via gateway de pagamentos Asaas.`,
+        createdAt: new Date().toISOString()
+      });
+
+      triggerNotification(`Compra concedida! Adicionado ${addedCredits} créditos com sucesso.`, "success");
+      setPaymentSuccess(true);
+      setPendingCreditsPack(null);
+      setPixCodeGenerated(null);
+      setPixQrUrl(null);
+      setIsProcessing(false);
+      loadFinancialData();
+    } catch (err: any) {
+      triggerNotification(`Erro ao gravar créditos: ${err.message}`, "warning");
+      setIsProcessing(false);
+    }
   };
 
   const handleDownloadInvoice = (pay: SaaSPayment) => {
@@ -209,7 +237,7 @@ Agradecemos sua colaboração com nossa rede de negócios!
   // Total invested computation
   const totalPaid = payments
     .filter(p => p.status === "RECEIVED" || p.status === "CONFIRMED")
-    .reduce((acc, current) => acc + current.amount, 0);
+    .reduce((acc, current) => acc + (current.amount || 0), 0);
 
   // Price mapping
   const monthlyPrices: Record<string, number> = {
@@ -689,6 +717,121 @@ Agradecemos sua colaboração com nossa rede de negócios!
           </div>
         )}
       </div>
+
+      {/* ASAAS SECURE CREDITS CHECKOUT OVERLAY MODAL */}
+      {pendingCreditsPack && (
+        <div id="modal-credits-asaas-checkout" className="fixed inset-0 bg-slate-950/75 backdrop-blur-sm z-[150] flex items-center justify-center p-4 animate-in fade-in duration-200 text-left">
+          <div className="bg-white text-slate-800 rounded-3xl w-full max-w-md border border-slate-200 shadow-2xl overflow-hidden flex flex-col">
+            
+            {/* Header */}
+            <div className="bg-slate-900 text-white p-5 flex justify-between items-center relative">
+              <div>
+                <span className="bg-blue-500/20 text-blue-400 text-[8px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider block w-max mb-1">
+                  ASAAS SECURE CREDITS CHECKOUT
+                </span>
+                <h4 className="font-black text-sm tracking-tight text-white flex items-center gap-1.5 font-sans">
+                  <span>Adquirir {pendingCreditsPack.credits} Créditos</span>
+                </h4>
+              </div>
+              <span className="font-black text-white text-base font-mono shrink-0">R$ {pendingCreditsPack.price},00</span>
+              
+              <button 
+                onClick={() => {
+                  setPendingCreditsPack(null);
+                  setPixCodeGenerated(null);
+                  setPixQrUrl(null);
+                }}
+                className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white p-1 rounded-full text-xs transition-colors border-none cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-4">
+              
+              {isProcessing ? (
+                <div className="py-12 flex flex-col items-center justify-center text-center space-y-3">
+                  <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                  <strong className="text-sm font-black text-slate-900">Validando transação com banco emissor...</strong>
+                  <p className="text-xs text-slate-400 font-semibold leading-normal">
+                    Reabastecendo saldo com a API segura do Sandbox Asaas.
+                  </p>
+                </div>
+              ) : pixCodeGenerated ? (
+                <div className="space-y-4 text-center">
+                  <div className="bg-slate-50 p-4 rounded-2xl flex flex-col items-center justify-center border border-slate-200/80">
+                    <div className="w-32 h-32 bg-white border p-2 rounded-xl flex items-center justify-center">
+                      <img src={pixQrUrl || ""} alt="Pix Qr Code" className="w-[120px] h-[120px]" referrerPolicy="no-referrer" />
+                    </div>
+                    <span className="text-[10px] text-slate-400 mt-2 font-black uppercase tracking-wider">Escaneie o QR Code Asaas acima</span>
+                  </div>
+
+                  <div className="space-y-1 text-xs text-left">
+                    <strong className="text-[10px] text-slate-400 block uppercase font-black tracking-wider">Chave Copia e Cola Pix</strong>
+                    <div className="flex gap-1.5">
+                      <input 
+                        type="text" 
+                        readOnly 
+                        value={pixCodeGenerated}
+                        className="flex-1 border border-slate-200 p-2.5 rounded-xl text-[9px] font-mono text-slate-550 bg-slate-50 focus:outline-none"
+                      />
+                      <button 
+                        onClick={() => {
+                          navigator.clipboard.writeText(pixCodeGenerated);
+                          triggerNotification("Chave PIX copiada!", "success");
+                        }}
+                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-xl border-none cursor-pointer text-xs font-bold"
+                      >
+                        Copiar
+                      </button>
+                    </div>
+                  </div>
+
+                  <button 
+                    type="button"
+                    onClick={handleConfirmCreditsPaymentSimulated}
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-3.5 rounded-2xl text-xs flex items-center justify-center gap-1 border-none cursor-pointer active:scale-95 transition-all shadow-sm"
+                  >
+                    <span>Simular Pagamento Compensado</span>
+                  </button>
+                </div>
+              ) : paymentMethod === "boleto" ? (
+                <div className="py-4 space-y-4 text-center">
+                  <div className="bg-slate-50 p-4 rounded-xl border flex flex-col items-center justify-center text-slate-600 gap-1.5">
+                    <span className="text-xl font-mono tracking-widest font-bold">||||| | ||||| || |||||| | |||</span>
+                    <span className="text-[9px] font-mono text-slate-400">Linha digitável: 34191.79001 01043.513184 91020.150008 7 940300000{pendingCreditsPack.price}</span>
+                  </div>
+                  <p className="text-slate-500 text-xs font-semibold">Boleto registrado pelo gateway Asaas. Deseja realizar a compensação?</p>
+                  <button 
+                    type="button"
+                    onClick={handleConfirmCreditsPaymentSimulated}
+                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold py-3.5 rounded-2xl text-xs border-none cursor-pointer active:scale-95 transition-all"
+                  >
+                    Simular Compensação do Boleto
+                  </button>
+                </div>
+              ) : (
+                <div className="py-4 space-y-4 text-center col-span-2">
+                  <div className="bg-emerald-50 text-emerald-800 p-4 rounded-2xl text-xs flex items-center gap-2">
+                    <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0 animate-bounce" />
+                    <span>Seus dados do Cartão de Crédito <strong>Final {cardNumber.slice(-4) || "4242"}</strong> foram pré-aprovados pela adquirente Asaas.</span>
+                  </div>
+                  <button 
+                    type="button"
+                    onClick={handleConfirmCreditsPaymentSimulated}
+                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold py-3.5 rounded-2xl text-xs border-none cursor-pointer active:scale-95 transition-all"
+                  >
+                    Confirmar Cobrança Cartão
+                  </button>
+                </div>
+              )}
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

@@ -778,7 +778,7 @@ export const ComercialDash: React.FC<ComercialDashProps> = ({
                       )}
 
                       <ul className="space-y-1.5 text-[11px] text-slate-400 text-left font-medium">
-                        {plan.features?.slice(0, 4).map((f, i) => (
+                        {(plan.features || []).slice(0, 4).map((f, i) => (
                           <li key={i} className="flex items-center gap-1.5 leading-normal">
                             <span className="text-blue-500 select-none">✓</span>
                             <span>{f}</span>
@@ -926,10 +926,10 @@ export const ComercialDash: React.FC<ComercialDashProps> = ({
                   <div key={i} className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border hover:bg-slate-100/50 transition-all">
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 bg-slate-900 border text-white flex items-center justify-center font-black text-xs rounded-full uppercase">
-                        {member.name.slice(0, 2)}
+                        {(member.name || 'MB').slice(0, 2)}
                       </div>
                       <div className="text-xs">
-                        <strong className="text-slate-850 text-sm font-bold block">{member.name}</strong>
+                        <strong className="text-slate-850 text-sm font-bold block">{member.name || 'Membro'}</strong>
                         <span className="text-slate-450 font-semibold block">{member.email}</span>
                       </div>
                     </div>
