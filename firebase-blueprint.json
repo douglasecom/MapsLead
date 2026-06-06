@@ -120,6 +120,54 @@
         "createdAt": { "type": "string" }
       },
       "required": ["id", "userId", "userName", "action", "details", "createdAt"]
+    },
+    "AiUsage": {
+      "title": "AiUsage",
+      "description": "AI consumption logs to track user's message tier limits.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "plan": { "type": "string" },
+        "messagesUsed": { "type": "number" },
+        "messagesLimit": { "type": "number" },
+        "lastResetDate": { "type": "string" }
+      },
+      "required": ["userId", "plan", "messagesUsed", "messagesLimit", "lastResetDate"]
+    },
+    "AiLog": {
+      "title": "AiLog",
+      "description": "Log of user prompts and AI-generated outputs.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "empresa": { "type": "string" },
+        "pergunta": { "type": "string" },
+        "resposta": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "modelo": { "type": "string" }
+      },
+      "required": ["id", "userId", "empresa", "pergunta", "resposta", "timestamp", "modelo"]
+    },
+    "SystemSetting": {
+      "title": "SystemSetting",
+      "description": "Global and system-wide setting parameters.",
+      "type": "object",
+      "properties": {
+        "internalEmails": { "type": "array" }
+      },
+      "required": []
+    },
+    "CreditConfig": {
+      "title": "CreditConfig",
+      "description": "Utility parameters and consumption multipliers for the credit system.",
+      "type": "object",
+      "properties": {
+        "ai_search_factor": { "type": "number" },
+        "lead_capture_factor": { "type": "number" },
+        "lead_delete_factor": { "type": "number" }
+      },
+      "required": []
     }
   },
   "firestore": {
@@ -150,6 +198,22 @@
     "/activityLogs/{logId}": {
       "schema": "SaaSActivityLog",
       "description": "Audit trails logged for CRM and operations."
+    },
+    "/aiUsage/{userId}": {
+      "schema": "AiUsage",
+      "description": "AI quotas tracks organizational consumption dynamically."
+    },
+    "/aiLogs/{logId}": {
+      "schema": "AiLog",
+      "description": "Prompt execution histories of Gemini query parameters."
+    },
+    "/settings/{settingId}": {
+      "schema": "SystemSetting",
+      "description": "White label configurations and access email list filters."
+    },
+    "/creditConfigs/{configId}": {
+      "schema": "CreditConfig",
+      "description": "Admin configurable parameters adjusting operational costs on credits."
     }
   }
 }

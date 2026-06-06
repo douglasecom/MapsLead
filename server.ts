@@ -375,6 +375,269 @@ app.post("/api/asaas/checkout", async (req, res) => {
   });
 });
 
+// ----------------------------------------------------
+// AdsHive AI Global - Limit Tracking and Interactions
+// ----------------------------------------------------
+
+async function getOrCreateUsage(userId: string, userPlan: string) {
+  if (!db) {
+    return {
+      userId,
+      plan: userPlan || "Gratuito",
+      messagesUsed: 0,
+      messagesLimit: 20,
+      lastResetDate: new Date().toISOString()
+    };
+  }
+
+  const usageRef = doc(db, "aiUsage", userId);
+  const usageSnap = await getDoc(usageRef);
+
+  const currentMonth = new Date().toISOString().substring(0, 7); // "YYYY-MM"
+  
+  let planLimit = 20;
+  const normalizedPlan = (userPlan || "Gratuito").toLowerCase();
+  
+  if (normalizedPlan === "starter") planLimit = 200;
+  else if (normalizedPlan === "pro") planLimit = 1000;
+  else if (normalizedPlan === "agência" || normalizedPlan === "agency") planLimit = 5000;
+  else if (normalizedPlan === "enterprise") planLimit = 10000;
+
+  if (usageSnap.exists()) {
+    const data = usageSnap.data();
+    let messagesUsed = data.messagesUsed ?? 0;
+    let messagesLimit = data.messagesLimit ?? planLimit;
+    let lastResetDate = data.lastResetDate || new Date().toISOString();
+
+    // Check if monthly reset applies
+    if (lastResetDate.substring(0, 7) !== currentMonth) {
+      messagesUsed = 0;
+      lastResetDate = new Date().toISOString();
+      await setDoc(usageRef, {
+        messagesUsed,
+        lastResetDate,
+        plan: userPlan || "Gratuito",
+        messagesLimit: planLimit // Reset to base limit of current subscribed plan
+      }, { merge: true });
+    } else {
+      // Just ensure the current plan name is synced
+      if (data.plan !== (userPlan || "Gratuito")) {
+        messagesLimit = planLimit;
+        await setDoc(usageRef, {
+          plan: userPlan || "Gratuito",
+          messagesLimit: planLimit
+        }, { merge: true });
+      }
+    }
+
+    return {
+      userId,
+      plan: userPlan || data.plan || "Gratuito",
+      messagesUsed,
+      messagesLimit,
+      lastResetDate
+    };
+  } else {
+    // Create new document
+    const lastResetDate = new Date().toISOString();
+    const newUsage = {
+      userId,
+      plan: userPlan || "Gratuito",
+      messagesUsed: 0,
+      messagesLimit: planLimit,
+      lastResetDate
+    };
+    await setDoc(usageRef, newUsage);
+    return newUsage;
+  }
+}
+
+// GET AI SYSTEM USAGE DETAILS
+app.get("/api/ai/usage/:userId", async (req, res) => {
+  const { userId } = req.params;
+  const { plan = "Gratuito" } = req.query;
+  try {
+    const usage = await getOrCreateUsage(userId, plan as string);
+    res.json(usage);
+  } catch (err: any) {
+    console.error("Error retrieving AI usage:", err);
+    res.status(500).json({ error: "Failed to retrieve AI usage details" });
+  }
+});
+
+// INTERACT WITH DYNAMIC ADSHIVE AI SERVICES
+app.post("/api/ai/interact", async (req, res) => {
+  const { userId, resource, prompt, companyDetails, userPlan = "Gratuito" } = req.body;
+  
+  if (!userId || !resource || !prompt) {
+    return res.status(400).json({ error: "Missing required arguments: userId, resource or prompt" });
+  }
+
+  try {
+    const usage = await getOrCreateUsage(userId, userPlan);
+    
+    // Limits check
+    if (usage.messagesUsed >= usage.messagesLimit) {
+      return res.status(403).json({ 
+        error: "Você atingiu o limite de IA do seu plano. Faça um upgrade ou adquira um pacote de interações para continuar.", 
+        overLimit: true,
+        usage 
+      });
+    }
+
+    const instructions: any = {
+      "copiloto": "Você é o Copiloto Comercial da plataforma AdsHive Prospect. Seu papel é atuar como consultor estratégico e executivo de vendas sênior B2B, sugerindo abordagens inovadoras de impacto, argumentações contundentes e táticas de conversão rápida baseadas nas informações do lead.",
+      "whatsapp": "Você é uma IA especialista em criar cópias exclusivas e de alta conversão para o WhatsApp. Escreva mensagens curtas (até 4 parágrafos), de leitura leve, marcante, repletas de gatilhos mentais da dor e sempre terminadas por uma CTA simples marcando reunião.",
+      "email": "Você é um copywriter de cold mailing B2B de elite. Crie um e-mail refinado com um título/assunto atraente, corpo focado na resolução de GAPs de SEO e Google Maps do lead, finalizando com solicitação de call de 5 minutos.",
+      "auditor": "Você é um auditor sênior de marketing e infraestrutura digital. Faça um diagnóstico completo do lead, destaque pontos fortes das avaliações e as falhas técnicas críticas na presença na web.",
+      "seo": "Você é um especialista em SEO Local e tráfego orgânico B2B. Dê conselhos práticos e táticos estruturados para otimizar os rankings do lead nos mapas e pesquisas do Google para torná-lo líder absoluto de tráfego local.",
+      "maps": "Você é especialista em Google Maps e posicionamento de marca local. Forneça estratégias de preenchimento do Google Meu Negócio, geração e resposta de reviews qualificados, e correções de imagem.",
+      "concorrentes": "Você é um analista estratégico corporativo. Sugira formas criativas para o lead desbancar os concorrentes de buscas locais, estabelecer propostas de valor únicas e roubar faturamento da concorrência.",
+      "proposta": "Você é um estruturador comercial de propostas B2B. Crie uma proposta comercial robusta em tópicos estruturados, definindo o escopo das entregas (SEO, Nova Landing Page, Pixel tráfego), vantagens estratégicas e um tom formal focado no retorno do investimento."
+    };
+
+    const sysInstruction = instructions[resource] || "Você é o assistente inteligente AdsHive AI, especialista em conversão B2B e marketing digital local.";
+
+    let companyContext = "";
+    if (companyDetails && companyDetails.name) {
+      companyContext = `\n--- DADOS DA EMPRESA SELECIONADA ---\n` +
+        `- Nome: ${companyDetails.name}\n` +
+        `- Setor / Nicho: ${companyDetails.niche || "Não informado"}\n` +
+        `- Local: ${companyDetails.location || "Não especificado"}\n` +
+        `- Avaliações: ${companyDetails.rating || "N/A"}★ (${companyDetails.reviews || 0} reviews)\n` +
+        `- Possui Website Oficial: ${companyDetails.hasWebsite ? "Sim" : "Não (Oportunidade Quente)"}\n` +
+        `- Telefone Comercial: ${companyDetails.phone || "Não informado"}\n` +
+        `- Análise GMB Original: ${companyDetails.gmbAnalysis || ""}\n` +
+        `-----------------------------------------\n\n`;
+    }
+
+    const fullPrompt = `${companyContext}Solicitação / Pergunta: ${prompt}\n\nFormate a resposta ricamente utilizando tópicos limpos, parágrafos fluidos, tom amigável porém técnico e focado no crescimento de vendas. Escreva em Português do Brasil (PT-BR).`;
+
+    const ai = getGeminiClient();
+    let generatedContentText = "";
+
+    if (ai) {
+      console.log(`Running AdsHive AI [${resource}] for User: ${userId}`);
+      const response = await generateContentWithRetry(ai, {
+        contents: fullPrompt,
+        config: {
+          systemInstruction: sysInstruction,
+          temperature: 0.82
+        }
+      });
+      generatedContentText = response.text || "";
+    } else {
+      generatedContentText = `⚠️ [Simulação Offline - Gemini indisponível]\nMuito obrigado por utilizar a Inteligência Artificial Comercial AdsHive AI!\n\nAnalisando o lead em foco: ${companyDetails?.name || "Sem Nome"}.\n\nRecomendados:\n- Implementar landing page ágil otimizada para telefones;\n- Organizar SEO Maps revisando palavras-chave estruturais;\n- Configurar campanhas locais de tráfego pago.\n\nSua pergunta: "${prompt}" foi processada com êxito!`;
+    }
+
+    let updatedUsage = { ...usage };
+    if (db) {
+      const usageRef = doc(db, "aiUsage", userId);
+      const finalUsed = usage.messagesUsed + 1;
+      await setDoc(usageRef, {
+        messagesUsed: finalUsed
+      }, { merge: true });
+      updatedUsage.messagesUsed = finalUsed;
+
+      // Persist AI usage logging
+      const logDocId = `ailog_${Date.now()}`;
+      await setDoc(doc(db, "aiLogs", logDocId), {
+        id: logDocId,
+        userId: userId,
+        empresa: companyDetails?.name || "Sem Empresa",
+        pergunta: prompt,
+        resposta: generatedContentText,
+        timestamp: new Date().toISOString(),
+        modelo: ai ? "gemini-3.5-flash" : "Simulado Offline"
+      });
+    }
+
+    res.json({
+      text: generatedContentText,
+      usage: updatedUsage
+    });
+
+  } catch (err: any) {
+    console.error("AdsHive AI interaction error:", err);
+    res.status(500).json({ error: "Falha ao processar solicitação na IA: " + err.message });
+  }
+});
+
+// BUY EXTRA AI INTERACTION PACKAGES (ASAAS TRANSACTION ACCREDITATION)
+app.post("/api/asaas/buy-ai-package", async (req, res) => {
+  const { userId, packageId, method = "pix" } = req.body;
+  if (!userId || !packageId) {
+    return res.status(400).json({ error: "Missing required arguments userId and packageId" });
+  }
+
+  const packages: any = {
+    "pack-100": { name: "Pacote 100 IA", interactions: 100, price: 10 },
+    "pack-500": { name: "Pacote 500 IA", interactions: 500, price: 40 },
+    "pack-1000": { name: "Pacote 1000 IA", interactions: 1000, price: 70 }
+  };
+
+  const selectedPack = packages[packageId];
+  if (!selectedPack) {
+    return res.status(400).json({ error: "Invalid packageId" });
+  }
+
+  const price = selectedPack.price;
+  const interactions = selectedPack.interactions;
+  const packName = selectedPack.name;
+
+  const payId = `pay_ai_${Date.now().toString(36)}`;
+
+  if (db) {
+    try {
+      // 1. Create payment history document
+      await setDoc(doc(db, "payments", payId), {
+        id: payId,
+        userId: userId,
+        teamId: userId,
+        date: new Date().toISOString(),
+        amount: price,
+        method: method,
+        status: "CONFIRMED",
+        link: "https://sandbox.asaas.com/comprovante/" + payId
+      });
+
+      // 2. Fetch or create aiUsage document to update messagesLimit
+      const userRef = doc(db, "users", userId);
+      const userSnap = await getDoc(userRef);
+      const userPlan = userSnap.exists() ? (userSnap.data().plan || "Gratuito") : "Gratuito";
+
+      const usage = await getOrCreateUsage(userId, userPlan);
+      const usageRef = doc(db, "aiUsage", userId);
+      
+      const newLimit = usage.messagesLimit + interactions;
+      await setDoc(usageRef, {
+        messagesLimit: newLimit
+      }, { merge: true });
+
+      // 3. Register Activity Log
+      await setDoc(doc(db, "activityLogs", `log_${Date.now()}`), {
+        id: `log_${Date.now()}`,
+        userId: userId,
+        userName: userSnap.exists() ? userSnap.data().name : "Usuário AdsHive",
+        action: "COMPRA_PACOTE_IA",
+        details: `Adquiriu ${packName} por R$ ${price}. Adicionado ${interactions} interações à cota mensal de IA.`,
+        createdAt: new Date().toISOString()
+      });
+
+    } catch (dbErr: any) {
+      console.error("Firestore update failed on buying AI Package:", dbErr.message);
+    }
+  }
+
+  return res.json({
+    status: "success",
+    message: `Pacote de IA adquirido com sucesso! Adicionamos ${interactions} interações de IA e logs à sua cota mensal.`,
+    paymentId: payId,
+    pixCode: method === "pix" ? `00020126580014BR.GOV.BCB.PIX0136asaas-wallet-ai-${packageId}` : null,
+    qrCodeUrl: method === "pix" ? "https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=asaas-checkout-ai-" + packageId : null
+  });
+});
+
 /**
  * GET TEMP VALIDATION FOR ASAAS WEBHOOK
  */

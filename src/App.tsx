@@ -339,6 +339,20 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
   const [zoom, setZoom] = useState<number>(14);
   const [isBellaMassaExpanded, setIsBellaMassaExpanded] = useState<boolean>(false);
 
+  // AdsHive Global AI dashboard & interactions states
+  const [aiUsageStats, setAiUsageStats] = useState({
+    messagesUsed: 0,
+    messagesLimit: 20,
+    plan: "Gratuito",
+    lastResetDate: ""
+  });
+  const [activeAiResource, setActiveAiResource] = useState<"copiloto" | "whatsapp" | "email" | "auditor" | "seo" | "maps" | "concorrentes" | "proposta">("copiloto");
+  const [aiCustomPrompt, setAiCustomPrompt] = useState<string>("");
+  const [showBuyAiPackModal, setShowBuyAiPackModal] = useState<boolean>(false);
+  const [isProcessingAiPackPurchase, setIsProcessingAiPackPurchase] = useState<boolean>(false);
+  const [isGeneratingAiCustom, setIsGeneratingAiCustom] = useState<boolean>(false);
+  const [customAIResponseOutput, setCustomAIResponseOutput] = useState<string>("");
+
   // Quick notification helper
   const triggerNotification = (text: string, type: "success" | "warning" | "info" = "success") => {
     const id = Date.now().toString();
@@ -497,6 +511,129 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
     syncProfileChanges();
   }, [managerName, managerEmail, managerRole]);
   // --- END FIREBASE INTEGRATION ENGINE ---
+
+  // AdsHive AI Global - State Sync, Extra Package Purchasing, and Interaction Flow
+  useEffect(() => {
+    if (!session?.id) return;
+    
+    const usageRef = doc(db, "aiUsage", session.id);
+    const unsubscribe = onSnapshot(usageRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setAiUsageStats({
+          messagesUsed: data.messagesUsed ?? 0,
+          messagesLimit: docSnap.id === 'douglasbateriacma@gmail.com' || (session?.email || '').toLowerCase() === 'douglasbateriacma@gmail.com' ? 999999 : (data.messagesLimit ?? 20),
+          plan: data.plan || session?.plan || "Gratuito",
+          lastResetDate: data.lastResetDate || ""
+        });
+      } else {
+        const initUsage = async () => {
+          try {
+            const resp = await fetch(`/api/ai/usage/${session.id}?plan=${encodeURIComponent(session?.plan || 'Gratuito')}`);
+            if (resp.ok) {
+              const uData = await resp.json();
+              setAiUsageStats({
+                messagesUsed: uData.messagesUsed ?? 0,
+                messagesLimit: (session?.email || '').toLowerCase() === 'douglasbateriacma@gmail.com' ? 999999 : (uData.messagesLimit ?? 20),
+                plan: uData.plan || session?.plan || "Gratuito",
+                lastResetDate: uData.lastResetDate || ""
+              });
+            }
+          } catch (e) {
+            console.error("Failed to seed initial user aiUsage:", e);
+          }
+        };
+        initUsage();
+      }
+    }, (err) => {
+      console.error("Erro escutando aiUsage do Firestore:", err);
+    });
+
+    return () => unsubscribe();
+  }, [session?.id, session?.plan]);
+
+  const handlePurchaseAiPackage = async (packageId: string) => {
+    if (!session?.id) return;
+    setIsProcessingAiPackPurchase(true);
+    try {
+      const response = await fetch("/api/asaas/buy-ai-package", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: session.id,
+          packageId,
+          method: "pix"
+        })
+      });
+      const data = await response.json();
+      if (response.ok && data.status === "success") {
+        triggerNotification(data.message, "success");
+        setShowBuyAiPackModal(false);
+      } else {
+        triggerNotification(data.error || "Erro ao processar ativação de pacote de IA.", "warning");
+      }
+    } catch (err: any) {
+      console.error("Error buying package:", err);
+      triggerNotification("Falha na rede ao adquirir pacote de IA.", "warning");
+    } finally {
+      setIsProcessingAiPackPurchase(false);
+    }
+  };
+
+  const handleRunAdsHiveAIInteract = async () => {
+    if (!session?.id) {
+      triggerNotification("Faça login para interagir com a IA.", "warning");
+      return;
+    }
+
+    if (!aiCustomPrompt.trim()) {
+      triggerNotification("Descreva por extenso o que deseja analisar ou perguntar.", "info");
+      return;
+    }
+
+    const isAdmin = (session?.email || '').toLowerCase() === "douglasbateriacma@gmail.com";
+    if (!isAdmin && aiUsageStats.messagesUsed >= aiUsageStats.messagesLimit) {
+      triggerNotification("Você atingiu o limite de IA do seu plano.", "warning");
+      return;
+    }
+
+    setIsGeneratingAiCustom(true);
+    try {
+      const response = await fetch("/api/ai/interact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: session.id,
+          userPlan: session?.plan || "Gratuito",
+          resource: activeAiResource,
+          prompt: aiCustomPrompt,
+          companyDetails: selectedLeadForAI.id ? {
+            name: selectedLeadForAI.name,
+            niche: selectedLeadForAI.niche,
+            location: selectedLeadForAI.location,
+            rating: selectedLeadForAI.rating || null,
+            reviews: selectedLeadForAI.reviews || null,
+            hasWebsite: selectedLeadForAI.hasWebsite,
+            phone: selectedLeadForAI.phone || null,
+            gmbAnalysis: selectedLeadForAI.gmbAnalysis || ""
+          } : null
+        })
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        setCustomAIResponseOutput(data.text);
+        triggerNotification("Resposta estruturada com sucesso pela IA!", "success");
+      } else {
+        triggerNotification(data.error || "Ocorreu uma falha ao contatar o AdsHive AI.", "warning");
+      }
+    } catch (err) {
+      console.error("AI client execution failed:", err);
+      triggerNotification("Erro de conexão ao acessar os servidores de IA.", "warning");
+    } finally {
+      setIsGeneratingAiCustom(false);
+    }
+  };
 
   // Perform Gemini Search for Leads
   const handleSearchLeads = async (e?: React.FormEvent) => {
@@ -2373,161 +2510,378 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
             </div>
           )}
 
-          {/* TAB 5: AI MESSAGE GENERATOR */}
+          {/* TAB 5: ADSHIVE AI GLOBAL CONSOLE & GENERATOR */}
           {activeTab === "ai_gerador" && (
             <div id="tab-ai-generator-view" className="space-y-8 animate-in fade-in duration-300">
               
-              <div>
-                <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Criar Nova Mensagem</h2>
-                <p className="text-slate-500 mt-1">Gere abordagens de vendas personalizadas e persuasivas para seus leads qualificados usando Inteligência Artificial (Gemini).</p>
+              {/* Header Info */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+                    AdsHive <span className="premium-gradient-text">AI Workspace</span>
+                    <span className="bg-gradient-to-r from-[#8B2EFF] to-[#C026FF] text-white text-[10px] uppercase font-black tracking-widest px-2 py-1 rounded-md shadow-glow-purple leading-none">
+                      Gemini Global
+                    </span>
+                  </h2>
+                  <p className="text-slate-500 dark:text-[#A1A1AA] mt-1 text-sm font-semibold">
+                    Seu hub inteligente para auditoria, cópias persuasivas e estratégias comerciais de altíssima conversão.
+                  </p>
+                </div>
+
+                {/* Legacy Mode / Pitch Copy Toggle Button */}
+                <button
+                  onClick={() => triggerNotification("Você já está na suíte premium! Use os agentes especializados abaixo para máxima conversão comercial.", "info")}
+                  className="bg-slate-100 dark:bg-[#1C1C26] border border-slate-200 dark:border-[#2B2B3A] text-slate-700 dark:text-white px-4 py-2.5 rounded-xl text-xs font-bold hover:bg-slate-200 dark:hover:bg-[#2B2B3A] transition-all flex items-center gap-1.5 cursor-pointer self-start md:self-auto"
+                >
+                  <Briefcase className="w-4 h-4 text-[#8B2EFF]" />
+                  <span>SDR Copilot Suite v3.2</span>
+                </button>
               </div>
 
-              {/* Control panels */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* DYNAMIC AI USAGE CONSUMPTION DASHBOARD CARD */}
+              <div className="premium-card-glow p-6 grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
                 
-                {/* Params selectors drawer */}
-                <div className="lg:col-span-4 bg-white border border-slate-200 p-6 rounded-2xl shadow-sm space-y-6">
-                  
-                  {/* Lead selector */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[11px] font-bold text-slate-400 tracking-wider uppercase">Selecionar Lead Alvo</label>
-                    <select 
-                      value={selectedLeadForAI.id}
-                      onChange={(e) => {
-                        const nextLead = leads.find(l => l.id === e.target.value);
-                        if (nextLead) setSelectedLeadForAI(nextLead);
-                      }}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 font-bold text-sm text-slate-800 focus:bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all cursor-pointer"
-                    >
-                      {leads.map(l => (
-                        <option key={l.id} value={l.id}>{l.name} ({l.niche})</option>
-                      ))}
-                    </select>
+                {/* Metrics */}
+                <div className="md:col-span-5 space-y-4">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-3 h-3 rounded-full bg-[#8B2EFF] animate-pulse"></div>
+                    <span className="text-[10px] uppercase font-bold tracking-widest text-[#B0B3C1]">Informaçoes de Consumo da Conta</span>
                   </div>
 
-                  {/* Channel selectors row */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[11px] font-bold text-slate-400 tracking-wider uppercase">Canal de Contato</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {["WhatsApp", "E-mail", "Instagram", "LinkedIn"].map((channel) => (
+                  <h3 className="text-lg font-black text-white flex items-center gap-2">
+                    Plano Atual: <span className="text-[#C93CFF] uppercase font-black tracking-wider">{aiUsageStats.plan}</span>
+                  </h3>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-[#14141B]/80 border border-[#2B2B3A]/40 p-3 rounded-xl">
+                      <span className="text-[9px] uppercase font-extrabold tracking-widest text-slate-500 block">ENVIADAS MÊS</span>
+                      <span className="text-xl font-black text-white mt-1 block">
+                        {aiUsageStats.messagesUsed}
+                      </span>
+                    </div>
+
+                    <div className="bg-[#14141B]/80 border border-[#2B2B3A]/40 p-3 rounded-xl">
+                      <span className="text-[9px] uppercase font-extrabold tracking-widest text-slate-500 block">RESTANTES MÊS</span>
+                      <span className="text-xl font-black text-[#8B2EFF] mt-1 block">
+                        {(session?.email || '').toLowerCase() === 'douglasbateriacma@gmail.com' ? "∞" : Math.max(0, aiUsageStats.messagesLimit - aiUsageStats.messagesUsed)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Progress bar gauge */}
+                <div className="md:col-span-4 flex flex-col justify-center space-y-2">
+                  <div className="flex justify-between text-xs font-bold text-[#A1A1AA]">
+                    <span>Cota Consumida</span>
+                    <span>
+                      {aiUsageStats.messagesUsed} / { (session?.email || '').toLowerCase() === 'douglasbateriacma@gmail.com' ? "Ilimitada" : aiUsageStats.messagesLimit } interações
+                    </span>
+                  </div>
+
+                  <div className="w-full bg-[#1C1C26] h-3 rounded-full overflow-hidden border border-[#2B2B3A]">
+                    <div 
+                      className="bg-gradient-to-r from-[#8B2EFF] to-[#C026FF] h-full transition-all duration-700"
+                      style={{ 
+                        width: `${Math.min(100, (session?.email || '').toLowerCase() === 'douglasbateriacma@gmail.com' ? 0.1 : (aiUsageStats.messagesUsed / aiUsageStats.messagesLimit) * 100)}%` 
+                      }}
+                    ></div>
+                  </div>
+
+                  <span className="text-[10px] text-slate-500 font-semibold italic">
+                    Período corrente. Reset automático em: {aiUsageStats.lastResetDate ? new Date(aiUsageStats.lastResetDate).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }) : "Próximo mês"}
+                  </span>
+                </div>
+
+                {/* Control Action triggers */}
+                <div className="md:col-span-3 flex flex-col gap-2.5">
+                  <button
+                    onClick={() => setActiveTab("comercial")}
+                    className="w-full bg-gradient-to-r from-[#8B2EFF] to-[#C026FF] hover:opacity-90 text-white font-extrabold py-2.5 rounded-xl text-xs uppercase tracking-wide cursor-pointer transition-all shadow-glow-purple text-center"
+                  >
+                    Fazer Upgrade de Plano
+                  </button>
+
+                  <button
+                    onClick={() => setShowBuyAiPackModal(true)}
+                    className="w-full bg-[#1C1C26] hover:bg-[#2B2B3A] border border-[#2B2B3A] text-white font-extrabold py-2.5 rounded-xl text-xs uppercase tracking-wide cursor-pointer transition-all text-center"
+                  >
+                    🚀 Comprar Pacote Extra IA
+                  </button>
+                </div>
+              </div>
+
+              {/* OVERLIMIT UI GATE - CONDITIONAL DISPLAY ON COMPLETION LIMITEXCEEDED */}
+              {!((session?.email || '').toLowerCase() === 'douglasbateriacma@gmail.com') && aiUsageStats.messagesUsed >= aiUsageStats.messagesLimit ? (
+                <div className="bg-rose-500/10 border border-rose-500/25 p-8 rounded-3xl text-center space-y-6 max-w-2xl mx-auto shadow-2xl animate-pulse">
+                  <div className="w-14 h-14 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center mx-auto">
+                    <AlertTriangle className="w-8 h-8" />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <h3 className="text-xl font-black text-rose-400">Você atingiu o limite de IA do seu plano.</h3>
+                    <p className="text-sm text-[#B0B3C1] max-w-md mx-auto">
+                      Sua cota mensal gratuita de <strong>{aiUsageStats.messagesLimit} interações</strong> foi totalmente consumida pelo seu SDR de prospecção.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
+                    <button
+                      onClick={() => setActiveTab("comercial")}
+                      className="bg-white text-slate-900 font-extrabold px-6 py-3 rounded-xl text-xs uppercase hover:bg-slate-50 transition-all cursor-pointer shadow-md"
+                    >
+                      Ver Planos & Upgrade (Ativação Imediata)
+                    </button>
+
+                    <button
+                      onClick={() => setShowBuyAiPackModal(true)}
+                      className="bg-gradient-to-r from-[#8B2EFF] to-[#C026FF] text-white font-extrabold px-6 py-3 rounded-xl text-xs uppercase hover:opacity-90 transition-all cursor-pointer shadow-glow-purple"
+                    >
+                      Adquirir Cupom Avulso de Prospecção
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                
+                /* CORE CONTAINER - DYNAMIC SPLIT SCREEN */
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                  
+                  {/* LEFT: RESOURCES NAVIGATOR MATRIX (8 TOOLS) */}
+                  <div className="lg:col-span-4 bg-white dark:bg-[#13111C]/60 border border-slate-200 dark:border-[#2B2B3A]/60 p-6 rounded-2xl shadow-sm space-y-6">
+                    
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 dark:text-[#7A7D8B] tracking-wider uppercase block">
+                        1. Selecionar Especialidade AI
+                      </label>
+                      <span className="text-[10px] text-slate-500 dark:text-[#A1A1AA] italic">Disponível em tempo de execução para todos</span>
+                    </div>
+
+                    {/* The 8 tools buttons grid */}
+                    <div className="grid grid-cols-1 gap-2">
+                      {[
+                        { id: "copiloto", label: "Copiloto Comercial", desc: "Script de vendas, abordagens frias & objeções B2B", icon: "🤖" },
+                        { id: "whatsapp", label: "Gerador de WhatsApp", desc: "Copies curtas, persuasivas e ctadas no fecho", icon: "💬" },
+                        { id: "email", label: "Gerador de E-mails", desc: "Cold mails refinados com assuntos magnéticos", icon: "✉️" },
+                        { id: "auditor", label: "Auditor de Empresa", desc: "Análise geral de GAPs digitais das empresas", icon: "🔍" },
+                        { id: "seo", label: "Análise de SEO", desc: "Palavras-chave e orientações de orgânico local", icon: "🚀" },
+                        { id: "maps", label: "Análise de Google Maps", desc: "Melhorias de ficha e reputação nos mapas", icon: "📍" },
+                        { id: "concorrentes", label: "Análise de Concorrentes", desc: "Comparativos locais de nicho sob a concorrência", icon: "⚔️" },
+                        { id: "proposta", label: "Gerador de Propostas", desc: "Escopo comercial formal detalhado de vendas", icon: "📑" }
+                      ].map((tool) => (
                         <button
-                          key={channel}
+                          key={tool.id}
                           type="button"
-                          onClick={() => setSelectedChannel(channel as any)}
-                          className={`flex items-center gap-1.5 justify-center py-2 px-3 rounded-lg font-bold text-xs transition-all pointer cursor-pointer ${
-                            selectedChannel === channel 
-                              ? "bg-slate-950 text-white" 
-                              : "bg-slate-50 border hover:bg-slate-100 text-slate-600"
+                          onClick={() => {
+                            setActiveAiResource(tool.id as any);
+                            // Set high impact standard pre-prompt to facilitate SDR workflow
+                            if (tool.id === "copiloto") setAiCustomPrompt("Crie um roteiro comercial inovador para quebrar a objeção de 'Estamos sem orçamento' para esse lead.");
+                            else if (tool.id === "whatsapp") setAiCustomPrompt("Gere uma abordagem amigável no WhatsApp de no máximo 3 parágrafos, sugerindo consertar o Maps dele.");
+                            else if (tool.id === "email") setAiCustomPrompt("Crie uma cold message fria elegante contendo no assunto uma menção direta ao erro de SEO que encontramos.");
+                            else if (tool.id === "auditor") setAiCustomPrompt("Apresente um relatório de auditoria simples de erros técnicos evidenciados no portal.");
+                            else if (tool.id === "seo") setAiCustomPrompt("Quais são as 5 principais palavras-chave orgânicas que esse negócio deveria ranquear para dominar a cidade?");
+                            else if (tool.id === "maps") setAiCustomPrompt("Como esse lead pode otimizar as fotos e revisões negativas para conseguir mais chamadas no GMB?");
+                            else if (tool.id === "concorrentes") setAiCustomPrompt("Como podemos argumentar contra o maior concorrente dele que já tem site estabelecido?");
+                            else if (tool.id === "proposta") setAiCustomPrompt("Crie uma estrutura de proposta com escopo de SEO Local no valor de R$800/mês cobrindo 3 meses de serviço.");
+                          }}
+                          className={`w-full text-left p-3 rounded-xl border flex gap-3 transition-all cursor-pointer ${
+                            activeAiResource === tool.id 
+                              ? "bg-[#8B2EFF]/10 border-[#8B2EFF] text-slate-900 dark:text-white ring-2 ring-[#8B2EFF]/20" 
+                              : "bg-slate-50 dark:bg-[#14141B] border-slate-200 dark:border-[#2B2B3A] text-slate-800 dark:text-[#A1A1AA] hover:bg-slate-100 dark:hover:bg-[#1C1C26]"
                           }`}
                         >
-                          {channel === "WhatsApp" && <MessageSquare className="w-3.5 h-3.5 text-emerald-500" />}
-                          {channel === "E-mail" && <Globe className="w-3.5 h-3.5 text-blue-500" />}
-                          <span>{channel}</span>
+                          <span className="text-xl shrink-0 mt-0.5">{tool.icon}</span>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="text-xs font-black leading-tight">{tool.label}</h4>
+                            <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">{tool.desc}</p>
+                          </div>
                         </button>
                       ))}
                     </div>
-                  </div>
 
-                  {/* Goal and Tone select inputs */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4">
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[11px] font-bold text-slate-400 tracking-wider uppercase">Foco do Serviço (Objetivo)</label>
-                      <select 
-                        value={selectedGoal}
-                        onChange={(e) => setSelectedGoal(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 font-bold text-xs text-slate-800 outline-none cursor-pointer"
-                      >
-                        <option value="SEO Local">SEO Local (Maps)</option>
-                        <option value="Venda de Site">Desenvolvimento de Site</option>
-                        <option value="Tráfego Pago">Anúncios Patrocinados (Google Ads)</option>
-                        <option value="Gestão de Redes">Gestão de Redes Sociais</option>
-                      </select>
+                    <div className="border-t border-slate-100 dark:border-[#2B2B3A] pt-4 space-y-3">
+                      
+                      {/* COMPANY AUTOMATIC DATA INJECTOR */}
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-400 dark:text-[#7A7D8B] tracking-wider uppercase block">
+                          2. Vincular Empresa (Dados Automáticos)
+                        </label>
+                        
+                        <select 
+                          value={selectedLeadForAI.id}
+                          onChange={(e) => {
+                            const nextLead = leads.find(l => l.id === e.target.value);
+                            if (nextLead) setSelectedLeadForAI(nextLead);
+                          }}
+                          className="w-full bg-slate-50 dark:bg-[#14141B] border border-slate-200 dark:border-[#2B2B3A] rounded-xl py-2.5 px-3 font-bold text-xs text-slate-800 dark:text-white outline-none cursor-pointer transition-all focus:border-[#8B2EFF]"
+                        >
+                          <option value="">-- Prospecção Genérica (Sem Empresa) --</option>
+                          {leads.map(l => (
+                            <option key={l.id} value={l.id}>{l.name} ({l.niche})</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {selectedLeadForAI.id ? (
+                        <div className="bg-emerald-500/5 border border-emerald-500/25 p-3 rounded-xl space-y-1.5 animate-in fade-in duration-200">
+                          <div className="flex items-center gap-1.5 font-bold text-[10px] text-emerald-600 dark:text-emerald-400">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
+                            <span>Dados Injetados para Copiloto</span>
+                          </div>
+                          
+                          <div className="text-[10px] text-slate-600 dark:text-[#B0B3C1] leading-relaxed space-y-0.5 font-semibold">
+                            <p>🏢 <strong className="text-slate-800 dark:text-white truncate block">{selectedLeadForAI.name}</strong></p>
+                            <p>📍 {selectedLeadForAI.location}</p>
+                            <p>🌐 Site: {selectedLeadForAI.hasWebsite ? "Sim" : "⚠️ Não Posicionado (GAP!)"}</p>
+                            <p>📞 Fone: {selectedLeadForAI.phone || "Nulo"}</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="bg-blue-500/5 border border-blue-500/25 p-3 rounded-xl text-[10px] font-semibold text-blue-600 dark:text-[#8B2EFF] leading-normal">
+                          💡 Selecione uma empresa acima da sua lista para que o AdsHive AI injete e cruze automaticamente todas as informações comerciais do lead na geração!
+                        </div>
+                      )}
+
                     </div>
 
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[11px] font-bold text-slate-400 tracking-wider uppercase">Tom de Voz</label>
-                      <select 
-                        value={selectedTone}
-                        onChange={(e) => setSelectedTone(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 font-bold text-xs text-slate-800 outline-none cursor-pointer"
-                      >
-                        <option value="Persuasivo">Persuasivo & Comercial</option>
-                        <option value="Profissional">Profissional & Técnico</option>
-                        <option value="Casual">Casual & Amigável</option>
-                        <option value="Autoritário">Autoritário & Consultivo</option>
-                      </select>
-                    </div>
                   </div>
 
-                  {/* Generation Trigger button */}
-                  <button 
-                    onClick={handleGenerateAICopyMessage}
-                    disabled={isGeneratingAI}
-                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-bold py-3 rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
-                  >
-                    {isGeneratingAI ? (
-                      <>
-                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                        <span>Pesquisando Gaps & Criando Copy...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="w-4 h-4 text-amber-300" />
-                        <span>Gerar Coprodução Inteligente</span>
-                      </>
-                    )}
-                  </button>
+                  {/* RIGHT: INTERACTIVE GENERATION CONTROLS & RESPONSE WORKSPACE */}
+                  <div className="lg:col-span-8 bg-white dark:bg-[#13111C]/60 border border-slate-200 dark:border-[#2B2B3A]/60 p-6 rounded-2xl shadow-sm flex flex-col justify-between space-y-5">
+                    
+                    <div className="space-y-4">
+                      
+                      {/* Section details */}
+                      <div className="flex items-center justify-between bg-slate-50 dark:bg-[#14141B] p-3 rounded-xl border border-slate-200 dark:border-[#2B2B3A]">
+                        <div>
+                          <span className="text-[10px] font-extrabold text-[#8B2EFF] uppercase tracking-widest pl-1 block">
+                            Módulo Ativo
+                          </span>
+                          <span className="text-sm font-bold text-slate-800 dark:text-white">
+                            {activeAiResource === "copiloto" && "🤖 Copiloto Comercial B2B"}
+                            {activeAiResource === "whatsapp" && "💬 Gerador de Cópias WhatsApp"}
+                            {activeAiResource === "email" && "✉️ Gerador de Cold Mail"}
+                            {activeAiResource === "auditor" && "🔍 Auditor Digital de Leads"}
+                            {activeAiResource === "seo" && "🚀 Consultoria de SEO Local"}
+                            {activeAiResource === "maps" && "📍 Otimizador do Google Maps"}
+                            {activeAiResource === "concorrentes" && "⚔️ Estrategista de Concorrentes"}
+                            {activeAiResource === "proposta" && "📑 Gerador de Propostas Comerciais"}
+                          </span>
+                        </div>
+                        <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-black uppercase px-2.5 py-1 rounded-full border border-emerald-500/20">
+                          Gemini Flash Ativo
+                        </span>
+                      </div>
 
-                </div>
+                      {/* Custom prompt input detail */}
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-bold text-slate-400 dark:text-[#7A7D8B] tracking-wider uppercase block">
+                          3. Defina sua Pergunta ou Instrução Adicional
+                        </label>
+                        
+                        <textarea
+                          placeholder="Ex: Crie um pitch de vendas altamente agressivo focado no retorno financeiro rápido para este lead..."
+                          value={aiCustomPrompt}
+                          onChange={(e) => setAiCustomPrompt(e.target.value)}
+                          className="w-full h-24 bg-slate-50 dark:bg-[#14141B] border border-slate-200 dark:border-[#2B2B3A] rounded-xl p-3 font-semibold text-xs leading-relaxed text-slate-800 dark:text-white focus:bg-white dark:focus:bg-[#1C1C26] focus:ring-2 focus:ring-[#8B2EFF]/20 focus:border-[#8B2EFF] outline-none resize-none transition-all"
+                        />
+                      </div>
 
-                {/* Text preview copy block */}
-                <div className="lg:col-span-8 bg-white border border-slate-200 p-6 rounded-2xl shadow-sm flex flex-col justify-between space-y-6">
-                  
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center bg-slate-50 p-2 rounded-lg border">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-2">PRÉVIA DA MENSAGEM DO MARKETING</span>
-                      <span className="bg-emerald-100 text-emerald-800 text-[9px] font-bold px-2 py-0.5 rounded-full uppercase">IA Ativa</span>
-                    </div>
-
-                    <textarea
-                      id="ai-pitch-output"
-                      value={generatedMessageText}
-                      onChange={(e) => setGeneratedMessageText(e.target.value)}
-                      className="w-full h-80 bg-[#f8f9ff]/50 border border-slate-200 rounded-xl p-4 font-mono text-sm leading-relaxed text-slate-800 focus:bg-white focus:ring-2 focus:ring-blue-105 outline-none resize-none"
-                    />
-                  </div>
-
-                  <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t">
-                    <button 
-                      onClick={handleSendViaWhatsApp}
-                      className="flex-1 bg-[#25D366] hover:bg-emerald-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-all shadow-md cursor-pointer"
-                    >
-                      <MessageSquare className="w-5 h-5" />
-                      <span>Mandar WhatsApp</span>
-                    </button>
-
-                    <div className="flex gap-2 w-full sm:w-auto">
-                      <button 
-                        onClick={copyToClipboard}
-                        className="flex-1 sm:flex-none bg-slate-100 border hover:bg-slate-200 text-slate-700 font-bold px-5 py-3 rounded-xl text-xs flex items-center justify-center gap-1 active:scale-95 transition-colors cursor-pointer"
+                      {/* Trigger button */}
+                      <button
+                        onClick={handleRunAdsHiveAIInteract}
+                        disabled={isGeneratingAiCustom}
+                        className="w-full bg-gradient-to-r from-[#8B2EFF] to-[#C026FF] hover:opacity-95 disabled:bg-slate-300 dark:disabled:bg-slate-800 text-white font-extrabold py-3.5 rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-glow-purple active:scale-95 cursor-pointer disabled:pointer-events-none"
                       >
-                        <Copy className="w-4 h-4" />
-                        <span>Copiar Material</span>
+                        {isGeneratingAiCustom ? (
+                          <>
+                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                            <span>Acessando Provedor de IA AdsHive... (Gemini)</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
+                            <span>Executar Análise Inteligente Integrada</span>
+                          </>
+                        )}
                       </button>
 
-                      <button 
-                        onClick={handleGenerateAICopyMessage}
-                        className="flex-1 sm:flex-none bg-slate-100 border hover:bg-slate-200 text-slate-700 font-bold px-5 py-3 rounded-xl text-xs flex items-center justify-center gap-1 active:scale-95 transition-colors cursor-pointer"
-                      >
-                        <RotateCcw className="w-4 h-4" />
-                        <span>Regerar</span>
-                      </button>
                     </div>
+
+                    {/* RESPONSE VIEWER GLASS PANEL */}
+                    <div className="space-y-3 pt-2">
+                      <div className="flex justify-between items-center bg-slate-50 dark:bg-[#14141B] px-3.5 py-2 rounded-xl border border-slate-200 dark:border-[#2B2B3A]">
+                        <span className="text-[10px] font-extrabold text-[#A1A1AA] uppercase tracking-widest pl-1">
+                          RESULTADO DA GERAÇÃO ADSHIVE AI
+                        </span>
+                        <span className="text-[10px] font-bold text-slate-400">
+                          Completo em PT-BR
+                        </span>
+                      </div>
+
+                      <div className="bg-[#0B0B0F]/90 border border-[#2B2B3A]/80 rounded-2xl p-4 sm:p-5 font-sans min-h-[320px] max-h-[440px] overflow-y-auto text-sm leading-relaxed text-slate-200 relative selection:bg-purple-900 shadow-inner">
+                        {customAIResponseOutput ? (
+                          <div className="whitespace-pre-line space-y-4 pr-1 text-[#D1D5DB]">
+                            {customAIResponseOutput}
+                          </div>
+                        ) : (
+                          <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 space-y-2">
+                            <Sparkles className="w-10 h-10 text-[#8B2EFF]/40 animate-pulse" />
+                            <h4 className="text-[#A1A1AA] font-black text-xs uppercase tracking-wide">Workspace Aguardando Processamento</h4>
+                            <p className="text-[11px] text-slate-500 max-w-xs font-semibold">
+                              Escolha uma das 8 especialidades da IA na lateral, indique seu lead-alvo e clique no botão acima para colher copies de impacto no ato!
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Panel Footer Toolbar */}
+                      {customAIResponseOutput && (
+                        <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                          <button
+                            onClick={() => {
+                              const cleanPhone = selectedLeadForAI.phone ? selectedLeadForAI.phone.replace(/[^0-9]/g, "") : "";
+                              if (cleanPhone) {
+                                const url = `https://api.whatsapp.com/send?phone=55${cleanPhone}&text=${encodeURIComponent(customAIResponseOutput.substring(0, 900))}`;
+                                window.open(url, "_blank");
+                                triggerNotification("Abordagem enviada para o WhatsApp!", "success");
+                              } else {
+                                triggerNotification("Lead sem telefone cadastrado! Copie o material no botão ao lado.", "warning");
+                              }
+                            }}
+                            className="flex-1 bg-[#25D366] hover:bg-emerald-600 text-white py-3 rounded-xl font-extrabold text-xs uppercase flex items-center justify-center gap-2 active:scale-95 transition-all shadow-md cursor-pointer"
+                          >
+                            <MessageSquare className="w-5 h-5" />
+                            <span>Mandar abordado pelo WhatsApp</span>
+                          </button>
+
+                          <div className="flex gap-2 w-full sm:w-auto">
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(customAIResponseOutput);
+                                triggerNotification("Cópia de conteúdo copiada para sua área de transferência!", "success");
+                              }}
+                              className="flex-1 sm:flex-none bg-slate-100 hover:bg-slate-200 dark:bg-[#1C1C26] dark:hover:bg-[#2B2B3A] border border-slate-200 dark:border-[#2B2B3A] text-slate-700 dark:text-white font-extrabold px-5 py-3 rounded-xl text-xs uppercase flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer"
+                            >
+                              <Copy className="w-4 h-4" />
+                              <span>Copiar Conteúdo</span>
+                            </button>
+
+                            <button
+                              onClick={handleRunAdsHiveAIInteract}
+                              className="flex-1 sm:flex-none bg-slate-100 hover:bg-slate-200 dark:bg-[#1C1C26] dark:hover:bg-[#2B2B3A] border border-slate-200 dark:border-[#2B2B3A] text-slate-700 dark:text-white font-extrabold px-5 py-3 rounded-xl text-xs uppercase flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer"
+                            >
+                              <RotateCcw className="w-4 h-4" />
+                              <span>Regerar</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                    </div>
+
                   </div>
 
                 </div>
-
-              </div>              
+              )}
 
             </div>
           )}
@@ -2939,6 +3293,68 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
 
         </main>
       </div>
+
+      {/* Buy AI Package Modal Overlay */}
+      {showBuyAiPackModal && (
+        <div id="modal-buy-ai-pack" className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[120] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-[#111116] rounded-3xl w-full max-w-lg border border-[#2B2B3A] shadow-2xl overflow-hidden relative p-8 text-center space-y-6">
+            
+            <button 
+              onClick={() => setShowBuyAiPackModal(false)}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-full hover:bg-white/10 transition-all cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="w-16 h-16 bg-[#8B2EFF]/10 border border-[#8B2EFF]/25 text-[#8B2EFF] rounded-full flex items-center justify-center mx-auto shadow-sm animate-pulse">
+              <Sparkles className="w-8 h-8 text-[#C026FF]" />
+            </div>
+
+            <div className="space-y-2">
+              <span className="text-[10px] font-black tracking-widest text-[#B0B3C1] uppercase bg-[#8B2EFF]/10 px-2 py-1 rounded">Expansão de AI Inteligente</span>
+              <h3 className="text-2xl font-black text-white tracking-tight">Cotas de Abordagem para SDR</h3>
+              <p className="text-slate-400 text-xs leading-relaxed max-w-sm mx-auto font-medium">
+                Selecione um pacote de créditos avulsos temporários de IA. Os créditos são adicionados no ato e não expiram com a mensalidade regular!
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 text-left">
+              {[
+                { id: "ai_100", label: "Pacote Iniciante Pro", limit: "100 interações", price: "R$ 10", desc: "Perfeito para novos nichos regionais" },
+                { id: "ai_500", label: "Pacote Equipes Ativas", limit: "500 interações", price: "R$ 40", desc: "Mais vendido entre SDRs digitais" },
+                { id: "ai_1000", label: "Pacote Alta Escala", limit: "1000 interações", price: "R$ 70", desc: "Custo-benefício otimizado de prospecção" }
+              ].map((pack) => (
+                <button
+                  key={pack.id}
+                  disabled={isProcessingAiPackPurchase}
+                  onClick={() => handlePurchaseAiPackage(pack.id)}
+                  className="w-full bg-[#14141B]/80 hover:bg-[#1C1C26] border border-[#2B2B3A] hover:border-[#8B2EFF] p-4 rounded-2xl flex items-center justify-between group transition-all duration-200 cursor-pointer disabled:opacity-55"
+                >
+                  <div className="space-y-1">
+                    <h4 className="text-xs font-black text-white group-hover:text-[#C026FF]">{pack.label}</h4>
+                    <p className="text-[10px] text-slate-400 font-semibold">{pack.desc}</p>
+                    <span className="inline-block bg-[#8B2EFF]/10 text-[#8B2EFF] text-[10px] uppercase font-black px-2 py-0.5 rounded mt-1">{pack.limit}</span>
+                  </div>
+                  
+                  <div className="text-right">
+                    <span className="text-xs text-slate-500 font-bold block">Cobrança única</span>
+                    <span className="text-lg font-black text-white">{pack.price}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            <div className="pt-2">
+              <p className="text-[9px] text-[#A1A1AA] font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 justify-center">
+                <span>⚡ Ativação automática no ato após PIX</span>
+                <span>•</span>
+                <span>Segurança de dados padrão AdsHive</span>
+              </p>
+            </div>
+
+          </div>
+        </div>
+      )}
 
       {/* Premium Lockout Blocker Modal Overlay */}
       {showPremiumBlockerModal && (

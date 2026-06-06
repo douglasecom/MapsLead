@@ -131,5 +131,51 @@ service cloud.firestore {
       allow create: if isSignedIn() && isValidId(logId) && incoming().userId == request.auth.uid;
       allow update, delete: if isAdmin();
     }
+
+    // 8. aiUsage collection
+    function isValidAiUsage(data) {
+      return data.userId is string && data.userId.size() <= 128
+        && data.plan is string && data.plan.size() <= 100
+        && data.messagesUsed is number
+        && data.messagesLimit is number
+        && data.lastResetDate is string;
+    }
+
+    match /aiUsage/{userId} {
+      allow get: if isSignedIn() && (isOwner(userId) || isAdmin());
+      allow list: if isSignedIn() && isAdmin();
+      allow create, update: if isSignedIn() && (isOwner(userId) || isAdmin()) && isValidAiUsage(incoming());
+      allow delete: if isAdmin();
+    }
+
+    // 9. aiLogs collection
+    function isValidAiLog(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.userId is string && data.userId.size() <= 128
+        && data.empresa is string && data.empresa.size() <= 200
+        && data.pergunta is string && data.pergunta.size() <= 5000
+        && data.resposta is string && data.resposta.size() <= 50000
+        && data.timestamp is string && data.timestamp.size() <= 100
+        && data.modelo is string && data.modelo.size() <= 100;
+    }
+
+    match /aiLogs/{logId} {
+      allow get: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource != null && resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && isValidId(logId) && isValidAiLog(incoming()) && incoming().userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // 10. settings collection (global, system white label configs)
+    match /settings/{settingId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // 11. creditConfigs collection
+    match /creditConfigs/{configId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
   }
 }

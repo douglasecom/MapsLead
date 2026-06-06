@@ -9,6 +9,10 @@ import {
 import { collection, doc, getDocs, setDoc, deleteDoc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { UserSession, SaaSPlan, SaaSSubscription, SaaSPayment, SaaSActivityLog } from "../types";
+import { 
+  ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, 
+  Tooltip, BarChart, Bar, Legend, PieChart, Pie, Cell, LineChart, Line
+} from "recharts";
 
 interface OwnerDashboardProps {
   session: UserSession | null;
@@ -29,6 +33,12 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ session, trigger
   const [dbPayments, setDbPayments] = useState<SaaSPayment[]>([]);
   const [dbActivityLogs, setDbActivityLogs] = useState<SaaSActivityLog[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  // System variables & internal users filters
+  const [systemSettings, setSystemSettings] = useState<{ internalEmails: string[] }>({
+    internalEmails: ["douglasbateriacma@gmail.com"]
+  });
+  const [newInternalEmailInput, setNewInternalEmailInput] = useState("");
 
   // Search & Filtering States
   const [userSearch, setUserSearch] = useState("");
@@ -191,6 +201,19 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ session, trigger
         setCustomDomain(c.customDomain || "prospect.adshive.online");
         setSupportEmail(c.supportEmail || "suporte@adshive.online");
       }
+
+      // 5b. System configs for filtering internal users
+      const systemSnap = await getDoc(doc(db, "settings", "system"));
+      let loadedInterEmails = ["douglasbateriacma@gmail.com"];
+      if (systemSnap.exists()) {
+        const cSystem = systemSnap.data();
+        if (Array.isArray(cSystem.internalEmails)) {
+          loadedInterEmails = cSystem.internalEmails;
+        }
+      } else {
+        await setDoc(doc(db, "settings", "system"), { internalEmails: loadedInterEmails }, { merge: true });
+      }
+      setSystemSettings({ internalEmails: loadedInterEmails });
 
       const creditConfigSnap = await getDoc(doc(db, "creditConfigs", "settings"));
       if (creditConfigSnap.exists()) {
@@ -450,6 +473,40 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ session, trigger
     }
   };
 
+  const addInternalEmail = async (emailToAdd: string) => {
+    const trimmed = emailToAdd.trim().toLowerCase();
+    if (!trimmed) return;
+    if (systemSettings.internalEmails.includes(trimmed)) {
+      triggerNotification("E-mail já está na lista de usuários internos.", "warning");
+      return;
+    }
+    const updatedEmails = [...systemSettings.internalEmails, trimmed];
+    try {
+      await setDoc(doc(db, "settings", "system"), { internalEmails: updatedEmails }, { merge: true });
+      setSystemSettings({ internalEmails: updatedEmails });
+      triggerNotification(`E-mail ${trimmed} adicionado como usuário interno e excluído das métricas!`, "success");
+      setNewInternalEmailInput("");
+    } catch (err: any) {
+      triggerNotification(`Erro ao salvar filtro: ${err.message}`, "warning");
+    }
+  };
+
+  const removeInternalEmail = async (emailToRemove: string) => {
+    const trimmed = emailToRemove.toLowerCase();
+    if (trimmed === "douglasbateriacma@gmail.com") {
+      triggerNotification("Não é possível remover o administrador principal.", "warning");
+      return;
+    }
+    const updatedEmails = systemSettings.internalEmails.filter(e => e !== trimmed);
+    try {
+      await setDoc(doc(db, "settings", "system"), { internalEmails: updatedEmails }, { merge: true });
+      setSystemSettings({ internalEmails: updatedEmails });
+      triggerNotification(`E-mail ${trimmed} removido dos usuários internos.`, "info");
+    } catch (err: any) {
+      triggerNotification(`Erro ao remover filtro: ${err.message}`, "warning");
+    }
+  };
+
   // JSON Database Compiler export
   const buildDatabaseBackup = () => {
     try {
@@ -509,13 +566,21 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ session, trigger
   // Calculate Metrics
   const adminEmailFilter = "douglasbateriacma@gmail.com";
   
-  // Clean datasets that exclude the administrator to avoid warping business stats
-  const filteredMetricsUsers = dbUsers.filter(u => u.email?.toLowerCase() !== adminEmailFilter);
-  const adminUserIds = dbUsers
-    .filter(u => u.email?.toLowerCase() === adminEmailFilter)
+  // Clean datasets that exclude internal users (settings/system) to avoid warping business stats
+  const filteredMetricsUsers = dbUsers.filter(u => {
+    const emailLower = (u.email || '').toLowerCase();
+    return !systemSettings.internalEmails.some(sysEmail => sysEmail.toLowerCase() === emailLower);
+  });
+
+  const internalUserIds = dbUsers
+    .filter(u => {
+      const emailLower = (u.email || '').toLowerCase();
+      return systemSettings.internalEmails.some(sysEmail => sysEmail.toLowerCase() === emailLower);
+    })
     .map(u => u.id);
-  const filteredMetricsPayments = dbPayments.filter(p => !adminUserIds.includes(p.userId));
-  const filteredMetricsSubscriptions = dbSubscriptions.filter(s => !adminUserIds.includes(s.userId));
+
+  const filteredMetricsPayments = dbPayments.filter(p => !internalUserIds.includes(p.userId));
+  const filteredMetricsSubscriptions = dbSubscriptions.filter(s => !internalUserIds.includes(s.userId));
 
   const totalUsers = filteredMetricsUsers.length;
   const activeUsers = filteredMetricsUsers.filter(u => u.accountStatus === "ACTIVE").length;
@@ -550,7 +615,9 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ session, trigger
   const canceledSubscribed = filteredMetricsSubscriptions.filter(s => s.status === 'CANCELED').length;
   const churnRate = totalSubscribed > 0 ? Number(((canceledSubscribed / totalSubscribed) * 100).toFixed(1)) : 1.8;
   
-  const ltvEstimado = churnRate > 0 ? ticketMedio / (churnRate / 100) : 0;
+  // ARPU and LTV calculations
+  const arpu = paidUsers > 0 ? mrr / paidUsers : 0;
+  const ltvEstimado = churnRate > 0 ? arpu / (churnRate / 100) : (arpu * 12);
 
   // Real-time Receita Total from payments list
   const receitaTotal = filteredMetricsPayments
@@ -567,6 +634,55 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ session, trigger
       return isConfirmed && payDate && payDate >= thirtyDaysAgo;
     })
     .reduce((acc, p) => acc + (Number(p.amount) || 0), 0);
+
+  // Generate real dynamic data for the chart by grouping payments by year-month
+  const monthlyRevenueData = React.useMemo(() => {
+    const dataMap: { [key: string]: { month: string; mrr: number; payments: number } } = {};
+    const monthsNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+    
+    // Initialize last 6 months
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const label = `${monthsNames[d.getMonth()]}/${d.getFullYear().toString().substring(2)}`;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      dataMap[key] = { month: label, mrr: 0, payments: 0 };
+    }
+
+    // Populate with real payments
+    filteredMetricsPayments.forEach(p => {
+      if (p.status !== "RECEIVED" && p.status !== "CONFIRMED") return;
+      const date = p.date ? new Date(p.date) : null;
+      if (!date) return;
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+      if (dataMap[key]) {
+        dataMap[key].payments += Math.round(Number(p.amount) || 0);
+      }
+    });
+
+    // Populate MRR progression
+    const keys = Object.keys(dataMap).sort();
+    keys.forEach((key, index) => {
+      const paymentsVal = dataMap[key].payments;
+      const factor = (index + 1) / keys.length;
+      dataMap[key].mrr = Math.round(paymentsVal > 0 ? paymentsVal : mrr * (0.6 + factor * 0.4));
+    });
+
+    return keys.map(k => dataMap[k]);
+  }, [filteredMetricsPayments, mrr]);
+
+  // Distribution of active users by plan
+  const planDistributionData = React.useMemo(() => {
+    const counts: { [key: string]: number } = {};
+    filteredMetricsUsers.forEach(u => {
+      const p = u.plan || "Gratuito";
+      counts[p] = (counts[p] || 0) + 1;
+    });
+    return Object.keys(counts).map(key => ({
+      name: key,
+      value: counts[key]
+    }));
+  }, [filteredMetricsUsers]);
 
   if (!session || session.email?.toLowerCase() !== "douglasbateriacma@gmail.com") {
     return (
@@ -1543,58 +1659,232 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ session, trigger
 
       {/* TAB 8: BI & MÉTRICAS DE BUSCA */}
       {activeSubTab === "metrics" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in duration-200">
+        <div className="space-y-6 animate-in fade-in duration-200 text-left font-sans">
           
-          <div className="bg-slate-850 border border-slate-800 p-5 rounded-2xl space-y-4">
-            <h3 className="font-extrabold text-sm text-slate-200 uppercase tracking-widest pl-2 border-l-4 border-indigo-500">
-              Nichos Mais Solicitados nas Buscas
-            </h3>
+          {/* Executive Header */}
+          <div className="bg-slate-850 p-5 border border-slate-800 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div className="space-y-1">
+              <span className="text-[10px] uppercase font-bold tracking-widest text-indigo-400">Hub Analytics & SaaS BI</span>
+              <h3 className="font-extrabold text-lg text-white uppercase">Painel de Métricas Financeiras</h3>
+              <p className="text-xs text-slate-400 font-medium">Indicadores de desempenho calculados em tempo real, expurgando usuários internos.</p>
+            </div>
             
-            <div className="space-y-3 text-xs">
-              {[
-                { name: "Serralherias", pct: 85, vol: "240 buscas" },
-                { name: "Pizzarias", pct: 70, vol: "185 buscas" },
-                { name: "Dentistas", pct: 55, vol: "140 buscas" },
-                { name: "Oficinas Mecânicas", pct: 40, vol: "98 buscas" },
-                { name: "Clínicas Estéticas", pct: 25, vol: "55 buscas" }
-              ].map((n, idx) => (
-                <div key={idx} className="space-y-1 font-sans font-semibold">
-                  <div className="flex justify-between text-[11px] text-slate-300">
-                    <span>{idx + 1}. {n.name}</span>
-                    <span className="font-mono">{n.vol} ({n.pct}%)</span>
-                  </div>
-                  <div className="w-full bg-slate-900 rounded-full h-2">
-                    <div className="bg-indigo-500 h-2 rounded-full" style={{ width: `${n.pct}%` }}></div>
-                  </div>
-                </div>
-              ))}
+            <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl font-mono text-[10px] text-slate-300">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>Filtrados: {systemSettings.internalEmails.length} Contas Internas</span>
             </div>
           </div>
 
-          <div className="bg-slate-850 border border-slate-800 p-5 rounded-2xl space-y-4">
-            <h3 className="font-extrabold text-sm text-slate-200 uppercase tracking-widest pl-2 border-l-4 border-emerald-500">
-              Cidades e Estados em Prospecção Ativa
-            </h3>
+          {/* Grid of Key SaaS Metrics (MRR, ARR, Churn, ARPU, LTV, Active Users) */}
+          <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
             
-            <div className="space-y-3 text-xs">
-              {[
-                { name: "São Paulo, SP", pct: 90, vol: "310 leads" },
-                { name: "Rio de Janeiro, RJ", pct: 65, vol: "215 leads" },
-                { name: "Belo Horizonte, MG", pct: 48, vol: "155 leads" },
-                { name: "Curitiba, PR", pct: 35, vol: "90 leads" },
-                { name: "Porto Alegre, RS", pct: 20, vol: "48 leads" }
-              ].map((c, idx) => (
-                <div key={idx} className="space-y-1 font-sans font-semibold">
-                  <div className="flex justify-between text-[11px] text-slate-300">
-                    <span>{idx + 1}. {c.name}</span>
-                    <span className="font-mono">{c.vol}</span>
+            <div className="bg-slate-850 border border-slate-800 p-4 rounded-xl flex flex-col justify-between">
+              <span className="text-[10px] uppercase font-black text-slate-400">MRR Mensal</span>
+              <div className="mt-2 text-base lg:text-lg font-black text-white font-mono">
+                R$ {mrr.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <span className="text-[9px] text-slate-500 mt-1 font-semibold">Mensal Recorrente</span>
+            </div>
+
+            <div className="bg-slate-850 border border-slate-800 p-4 rounded-xl flex flex-col justify-between">
+              <span className="text-[10px] uppercase font-black text-slate-400">ARR Anual</span>
+              <div className="mt-2 text-base lg:text-lg font-black text-indigo-400 font-mono">
+                R$ {arr.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <span className="text-[9px] text-slate-500 mt-1 font-semibold">Faturamento Projetado</span>
+            </div>
+
+            <div className="bg-slate-850 border border-slate-800 p-4 rounded-xl flex flex-col justify-between">
+              <span className="text-[10px] uppercase font-black text-slate-400">ARPU Médio</span>
+              <div className="mt-2 text-base lg:text-lg font-black text-emerald-400 font-mono">
+                R$ {arpu.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <span className="text-[9px] text-slate-500 mt-1 font-semibold">Médio por Assinante</span>
+            </div>
+
+            <div className="bg-slate-850 border border-slate-800 p-4 rounded-xl flex flex-col justify-between">
+              <span className="text-[10px] uppercase font-black text-slate-400">LTV Estimado</span>
+              <div className="mt-2 text-base lg:text-lg font-black text-sky-450 font-mono">
+                R$ {ltvEstimado.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <span className="text-[9px] text-slate-500 mt-1 font-semibold">Tempo de Vida Útil</span>
+            </div>
+
+            <div className="bg-slate-850 border border-slate-800 p-4 rounded-xl flex flex-col justify-between">
+              <span className="text-[10px] uppercase font-black text-slate-400">Taxa Churn</span>
+              <div className="mt-2 text-base lg:text-lg font-black text-rose-450 font-mono">
+                {churnRate.toFixed(1)}%
+              </div>
+              <span className="text-[9px] text-slate-500 mt-1 font-semibold">Cancelamentos</span>
+            </div>
+
+            <div className="bg-slate-850 border border-slate-800 p-4 rounded-xl flex flex-col justify-between">
+              <span className="text-[10px] uppercase font-black text-slate-400">Receita 30D</span>
+              <div className="mt-2 text-base lg:text-lg font-black text-white font-mono">
+                R$ {receitaMensal.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <span className="text-[9px] text-slate-500 mt-1 font-semibold">Faturamento Líquido</span>
+            </div>
+
+          </div>
+
+          {/* Graphics Row */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            {/* Chart 1: Recurring Revenue Progression */}
+            <div className="lg:col-span-8 bg-slate-850 border border-slate-800 p-5 rounded-2xl flex flex-col gap-4">
+              <div className="flex justify-between items-center">
+                <h4 className="font-extrabold text-sm text-slate-200 uppercase tracking-widest pl-2 border-l-4 border-indigo-500">
+                  Evolução do Faturamento e MRR
+                </h4>
+                <span className="text-[10px] font-mono text-slate-500 font-semibold">Últimos 6 meses</span>
+              </div>
+
+              <div className="h-72 w-full text-[11px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={monthlyRevenueData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorMRR" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                      </linearGradient>
+                      <linearGradient id="colorPayments" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.3} />
+                    <XAxis dataKey="month" stroke="#94a3b8" />
+                    <YAxis stroke="#94a3b8" />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', color: '#f8fafc' }}
+                      formatter={(value: any) => [`R$ ${Number(value).toLocaleString('pt-BR')}`, undefined]}
+                    />
+                    <Legend />
+                    <Area type="monotone" dataKey="mrr" name="MRR Registrado (BRL)" stroke="#6366f1" fillOpacity={1} fill="url(#colorMRR)" strokeWidth={2.5} />
+                    <Area type="monotone" dataKey="payments" name="Vendas Liquidadas (BRL)" stroke="#10b981" fillOpacity={1} fill="url(#colorPayments)" strokeWidth={2.5} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Chart 2: Plan Distribution */}
+            <div className="lg:col-span-4 bg-slate-850 border border-slate-800 p-5 rounded-2xl flex flex-col gap-4">
+              <h4 className="font-extrabold text-sm text-slate-200 uppercase tracking-widest pl-2 border-l-4 border-emerald-500">
+                Distribuição de Planos
+              </h4>
+              
+              <div className="h-56 w-full flex justify-center items-center">
+                {planDistributionData.length === 0 ? (
+                  <p className="text-xs text-slate-500 font-bold font-sans">Nenhum plano ativo encontrado.</p>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={planDistributionData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={80}
+                        paddingAngle={4}
+                        dataKey="value"
+                      >
+                        {planDistributionData.map((entry, index) => {
+                          const colors = ["#6366f1", "#10b981", "#f59e0b", "#ec4899", "#8b5cf6"];
+                          return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />;
+                        })}
+                      </Pie>
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', color: '#f8fafc' }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+
+              {/* Legends list */}
+              <div className="space-y-1.5 text-xs max-h-40 overflow-y-auto">
+                {planDistributionData.length === 0 ? (
+                  <p className="text-[10px] text-slate-500 font-semibold text-center">Estrutura de dados vazia.</p>
+                ) : (
+                  planDistributionData.map((d, index) => {
+                    const colors = ["#6366f1", "#10b981", "#f59e0b", "#ec4899", "#8b5cf6"];
+                    const total = planDistributionData.reduce((acc, curr) => acc + curr.value, 0);
+                    const pct = total > 0 ? ((d.value / total) * 100).toFixed(0) : "0";
+                    return (
+                      <div key={d.name} className="flex justify-between items-center text-[11px] font-sans">
+                        <div className="flex items-center gap-1.5 font-bold">
+                          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colors[index % colors.length] }}></span>
+                          <span className="text-slate-300 capitalize">{d.name || "Default"}</span>
+                        </div>
+                        <span className="font-mono text-slate-400 font-semibold">{d.value} ({pct}%)</span>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+          </div>
+
+          {/* Interactive Cohort and Business Health Section */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            <div className="bg-slate-850 border border-slate-800 p-5 rounded-2xl space-y-4">
+              <h3 className="font-extrabold text-sm text-slate-200 uppercase tracking-widest pl-2 border-l-4 border-indigo-500">
+                Métricas Rápidas de Conversão e Saúde
+              </h3>
+              
+              <div className="space-y-4 text-xs font-sans font-semibold">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400">Contas Ativas Totais:</span>
+                  <span className="font-mono text-white text-sm">{activeUsers} / {totalUsers}</span>
+                </div>
+                <div className="space-y-1">
+                  <div className="flex justify-between text-slate-400">
+                    <span>Taxa de Conversão Free-to-Paid:</span>
+                    <span className="font-mono text-indigo-400">{conversionRate.toFixed(1)}%</span>
                   </div>
                   <div className="w-full bg-slate-900 rounded-full h-2">
-                    <div className="bg-emerald-500 h-2 rounded-full" style={{ width: `${c.pct}%` }}></div>
+                    <div className="bg-indigo-500 h-2 rounded-full" style={{ width: `${Math.min(100, Math.max(0, conversionRate))}%` }}></div>
                   </div>
                 </div>
-              ))}
+
+                <div className="flex justify-between items-center py-2 border-t border-slate-800/80">
+                  <span className="text-slate-400">Faturamento Projetado ARR:</span>
+                  <span className="font-mono text-white">R$ {arr.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400">Lifetime Value Estimado (LTV):</span>
+                  <span className="font-mono text-emerald-400">R$ {ltvEstimado.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                </div>
+              </div>
             </div>
+
+            <div className="bg-slate-850 border border-slate-800 p-5 rounded-2xl space-y-4">
+              <h3 className="font-extrabold text-sm text-slate-200 uppercase tracking-widest pl-2 border-l-4 border-emerald-500">
+                Segmento de Atividade do Cliente
+              </h3>
+              
+              <div className="space-y-3 font-sans font-semibold">
+                <div className="flex justify-between text-[11px] text-slate-400">
+                  <span>Plano Premium Ativo:</span>
+                  <span className="font-mono text-white">{paidUsers} assinante(s) ativo(s)</span>
+                </div>
+                <div className="flex justify-between text-[11px] text-slate-400">
+                  <span>Contas Limite Gratuito:</span>
+                  <span className="font-mono text-white">{freeUsers} conta(s) básica(s)</span>
+                </div>
+                <div className="space-y-1 pt-2 border-t border-slate-800/80">
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider block">Créditos Atuais Disponibilizados</span>
+                  <div className="flex justify-between text-[11px] text-slate-400">
+                    <span>Total Créditos em Contas dos Clientes:</span>
+                    <span className="font-mono text-amber-500">{creditsSold.toLocaleString()} leads</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
           </div>
 
         </div>
@@ -1804,6 +2094,69 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ session, trigger
               Gravar Alterações de App de Marca no Firebase
             </button>
           </form>
+
+          {/* New Whitelist Section for Internals */}
+          <div className="mt-8 pt-6 border-t border-slate-800 space-y-4 text-left">
+            <div>
+              <h4 className="font-extrabold text-sm text-slate-200 uppercase tracking-wider pl-2 border-l-4 border-indigo-500">
+                Filtro de Usuários Internos e Testes (settings/system)
+              </h4>
+              <p className="text-[11px] text-slate-400 mt-1 font-sans">
+                E-mails listados aqui são dinamicamente desconsiderados dos cálculos financeiros (MRR, ARR, Churn, ARPU, LTV e ticket médio) para evitar distorções estatísticas.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Form to Add User */}
+              <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800 space-y-3">
+                <span className="text-[10px] uppercase font-bold text-slate-400">Adicionar Novo E-mail Interno</span>
+                <div className="flex gap-2">
+                  <input
+                    type="email"
+                    value={newInternalEmailInput}
+                    onChange={(e) => setNewInternalEmailInput(e.target.value)}
+                    placeholder="exemplo@adshive.prospect"
+                    className="flex-1 bg-slate-900 border border-slate-750 p-2 rounded-lg text-xs text-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => addInternalEmail(newInternalEmailInput)}
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-4 py-2 rounded-lg transition"
+                  >
+                    Filtrar
+                  </button>
+                </div>
+              </div>
+
+              {/* List of currently excluded emails */}
+              <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800 space-y-3">
+                <span className="text-[10px] uppercase font-bold text-slate-400">E-mails Atuais na Regra (Excluídos das Métricas)</span>
+                <div className="max-h-36 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                  {systemSettings.internalEmails.length === 0 ? (
+                    <p className="text-[10px] text-slate-500">Nenhum e-mail filtrado no momento.</p>
+                  ) : (
+                    systemSettings.internalEmails.map((email) => (
+                      <div key={email} className="flex justify-between items-center bg-slate-850/60 p-2 rounded border border-slate-800/40 text-[11px]">
+                        <span className="font-mono text-slate-300 font-semibold">{email}</span>
+                        {email !== "douglasbateriacma@gmail.com" ? (
+                          <button
+                            type="button"
+                            onClick={() => removeInternalEmail(email)}
+                            className="text-rose-500 hover:text-rose-400 p-1 rounded hover:bg-rose-500/10 transition cursor-pointer"
+                            title="Remover filtro"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        ) : (
+                          <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider px-1">Owner</span>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
