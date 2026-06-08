@@ -30,6 +30,7 @@ export const Financeiro: React.FC<FinanceiroProps> = ({ session, triggerNotifica
   const [pendingCreditsPack, setPendingCreditsPack] = useState<any | null>(null);
   const [pixCodeGenerated, setPixCodeGenerated] = useState<string | null>(null);
   const [pixQrUrl, setPixQrUrl] = useState<string | null>(null);
+  const [secondsLeft, setSecondsLeft] = useState<number>(0);
 
   // Credit Card fields
   const [cardNumber, setCardNumber] = useState("");
@@ -192,6 +193,31 @@ export const Financeiro: React.FC<FinanceiroProps> = ({ session, triggerNotifica
       setIsProcessing(false);
     }
   };
+
+  useEffect(() => {
+    if (!pendingCreditsPack) {
+      setSecondsLeft(0);
+      return;
+    }
+    setSecondsLeft(12); // Give the user 12 seconds to "pay" or observe the live checking state
+  }, [pendingCreditsPack]);
+
+  useEffect(() => {
+    if (secondsLeft <= 0) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      setSecondsLeft(prev => {
+        if (prev <= 1) {
+          // Trigger automatic compensation simulation on 0
+          handleConfirmCreditsPaymentSimulated();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [secondsLeft, pendingCreditsPack]);
 
   const handleDownloadInvoice = (pay: SaaSPayment) => {
     triggerNotification(`Baixando comprovante da transação #${pay.id}...`, "success");
@@ -777,6 +803,7 @@ Agradecemos sua colaboração com nossa rede de negócios!
                         className="flex-1 border border-slate-200 p-2.5 rounded-xl text-[9px] font-mono text-slate-550 bg-slate-50 focus:outline-none"
                       />
                       <button 
+                        type="button"
                         onClick={() => {
                           navigator.clipboard.writeText(pixCodeGenerated);
                           triggerNotification("Chave PIX copiada!", "success");
@@ -788,12 +815,21 @@ Agradecemos sua colaboração com nossa rede de negócios!
                     </div>
                   </div>
 
+                  {/* Webhook checking logs for Pix */}
+                  <div className="bg-slate-950 p-3 h-[72px] rounded-xl font-mono text-[9px] text-[#A5B4FC] space-y-1 text-left relative flex flex-col justify-center">
+                    <span className="absolute top-2 right-2 text-[7px] bg-indigo-500/10 border border-indigo-400/20 px-1.5 py-0.5 rounded text-[#818CF8] animate-pulse uppercase">Asaas Server Log</span>
+                    <p className="opacity-40">● [asaas] Webhook status: WAITING_RECEIPT</p>
+                    <p className="text-white animate-pulse">
+                      ● [Central-Pix] Sincronização em tempo real: {secondsLeft > 0 ? `Buscando pagamento... auto-conclui em ${secondsLeft}s` : "Compensado!"}
+                    </p>
+                  </div>
+
                   <button 
                     type="button"
                     onClick={handleConfirmCreditsPaymentSimulated}
                     className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-3.5 rounded-2xl text-xs flex items-center justify-center gap-1 border-none cursor-pointer active:scale-95 transition-all shadow-sm"
                   >
-                    <span>Simular Pagamento Compensado</span>
+                    <span>Simular Pagamento Compensado Agora</span>
                   </button>
                 </div>
               ) : paymentMethod === "boleto" ? (
@@ -803,12 +839,22 @@ Agradecemos sua colaboração com nossa rede de negócios!
                     <span className="text-[9px] font-mono text-slate-400">Linha digitável: 34191.79001 01043.513184 91020.150008 7 940300000{pendingCreditsPack.price}</span>
                   </div>
                   <p className="text-slate-500 text-xs font-semibold">Boleto registrado pelo gateway Asaas. Deseja realizar a compensação?</p>
+
+                  {/* Webhook checking logs for Boleto */}
+                  <div className="bg-slate-950 p-3 h-[72px] rounded-xl font-mono text-[9px] text-[#A5B4FC] space-y-1 text-left relative flex flex-col justify-center">
+                    <span className="absolute top-2 right-2 text-[7px] bg-indigo-500/10 border border-indigo-400/20 px-1.5 py-0.5 rounded text-[#818CF8] animate-pulse uppercase">Asaas Server Log</span>
+                    <p className="opacity-40">● [asaas] Webhook status: WAITING_RECEIPT</p>
+                    <p className="text-white animate-pulse">
+                      ● [Central-Slips] Verificação bancária: {secondsLeft > 0 ? `Aguardando compensação... auto-paga em ${secondsLeft}s` : "Compensado!"}
+                    </p>
+                  </div>
+
                   <button 
                     type="button"
                     onClick={handleConfirmCreditsPaymentSimulated}
                     className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold py-3.5 rounded-2xl text-xs border-none cursor-pointer active:scale-95 transition-all"
                   >
-                    Simular Compensação do Boleto
+                    <span>Simular Compensação do Boleto Agora</span>
                   </button>
                 </div>
               ) : (
@@ -817,12 +863,22 @@ Agradecemos sua colaboração com nossa rede de negócios!
                     <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0 animate-bounce" />
                     <span>Seus dados do Cartão de Crédito <strong>Final {cardNumber.slice(-4) || "4242"}</strong> foram pré-aprovados pela adquirente Asaas.</span>
                   </div>
+
+                  {/* Webhook checking logs for Card */}
+                  <div className="bg-slate-950 p-3 h-[72px] rounded-xl font-mono text-[9px] text-[#A5B4FC] space-y-1 text-left relative flex flex-col justify-center">
+                    <span className="absolute top-2 right-2 text-[7px] bg-indigo-500/10 border border-indigo-400/20 px-1.5 py-0.5 rounded text-[#818CF8] animate-pulse uppercase">Asaas Server Log</span>
+                    <p className="opacity-40">● [asaas] Webhook status: WAITING_CAPT_EXEC</p>
+                    <p className="text-white animate-pulse">
+                      ● [Central-Acq] Capturando cobrança via adquirente: {secondsLeft > 0 ? `Processando cartão... auto-paga em ${secondsLeft}s` : "Capturado!"}
+                    </p>
+                  </div>
+
                   <button 
                     type="button"
                     onClick={handleConfirmCreditsPaymentSimulated}
                     className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold py-3.5 rounded-2xl text-xs border-none cursor-pointer active:scale-95 transition-all"
                   >
-                    Confirmar Cobrança Cartão
+                    <span>Confirmar Cobrança Cartão Agora</span>
                   </button>
                 </div>
               )}

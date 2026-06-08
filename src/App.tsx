@@ -189,6 +189,20 @@ export default function App() {
   const [dailyQuotaCount, setDailyQuotaCount] = useState<number>(0);
   const [notifications, setNotifications] = useState<Array<{ id: string; text: string; type: "success" | "warning" | "info" }>>([]);
   
+  // Google Maps credential config state
+  const [mapsConfig, setMapsConfig] = useState<{ hasKey: boolean; key: string }>({ hasKey: false, key: "" });
+
+  useEffect(() => {
+    fetch("/api/config/maps")
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.hasKey) {
+          setMapsConfig(data);
+        }
+      })
+      .catch(err => console.error("Erro de configuração do Google Maps:", err));
+  }, []);
+  
   // Freemium pricing blocker configurations
   const [showPremiumBlockerModal, setShowPremiumBlockerModal] = useState<boolean>(false);
   const [adminSubTab, setAdminSubTab] = useState<"perfil" | "creditos">("perfil");
@@ -1913,77 +1927,91 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
 
                   {/* Aesthetic Map section wrapper */}
                   <div id="map-visualization" className="bg-[#12121e] rounded-2xl h-[450px] relative border border-slate-800 shadow-xl overflow-hidden">
-                    {/* SVG map visual accents/grid */}
-                    <div className="absolute inset-0 opacity-15">
-                      <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-                        <defs>
-                          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#4F46E5" strokeWidth="1" />
-                          </pattern>
-                        </defs>
-                        <rect width="100%" height="100%" fill="url(#grid)" />
-                      </svg>
-                    </div>
-
-                    {/* Vector simulated city districts */}
-                    <div className="absolute inset-x-0 inset-y-0 opacity-40 mix-blend-color-dodge pointer-events-none">
-                      <div className="absolute top-[10%] left-[20%] w-32 h-32 rounded-full bg-indigo-500/20 blur-2xl"></div>
-                      <div className="absolute bottom-[15%] right-[25%] w-48 h-48 rounded-full bg-cyan-500/20 blur-3xl"></div>
-                      <div className="absolute top-[40%] right-[10%] w-40 h-40 rounded-full bg-violet-500/10 blur-2xl"></div>
-                    </div>
-
-                    {/* Street maps layout simulation lines */}
-                    <div className="absolute inset-y-0 left-[35%] w-[2px] bg-slate-800/80 pointer-events-none"></div>
-                    <div className="absolute inset-y-0 left-[68%] w-[2px] bg-slate-800/80 pointer-events-none"></div>
-                    <div className="absolute inset-x-0 top-[28%] h-[2px] bg-slate-800/80 pointer-events-none"></div>
-                    <div className="absolute inset-x-0 top-[72%] h-[2px] bg-slate-800/80 pointer-events-none"></div>
-
-                    {/* Central radar scanner wave */}
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[350px] h-[350px] border border-indigo-500/10 rounded-full flex items-center justify-center pointer-events-none">
-                      <div className="w-[200px] h-[200px] border border-indigo-500/20 rounded-full flex items-center justify-center">
-                        <div className="w-[80px] h-[80px] border border-cyan-500/30 rounded-full animate-ping"></div>
-                      </div>
-                    </div>
-
-                    {/* Neighborhood tags */}
-                    <div className="absolute top-[15%] left-[20%] text-[10px] text-indigo-400 font-mono tracking-widest font-bold uppercase select-none opacity-40">Distrito Centro</div>
-                    <div className="absolute top-[45%] left-[72%] text-[10px] text-cyan-400 font-mono tracking-widest font-bold uppercase select-none opacity-40">Região Comercial</div>
-                    <div className="absolute bottom-[18%] left-[45%] text-[10px] text-violet-400 font-mono tracking-widest font-bold uppercase select-none opacity-40">Zona Sul</div>
-
-                    {/* Plotted Interactive Pins */}
-                    {searchResults.map((lead, i) => {
-                      const pos = getPinPosition(lead.id, i, searchResults.length);
-                      const isSelected = selectedMapPin?.id === lead.id;
-                      const hasNoSite = !lead.hasWebsite;
-
-                      return (
-                        <div 
-                          key={lead.id}
-                          className="absolute transition-all duration-350"
-                          style={{ left: pos.left, top: pos.top }}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => setSelectedMapPin(lead)}
-                            className={`relative focus:outline-none flex items-center justify-center cursor-pointer transition-all hover:scale-125 hover:z-50 ${isSelected ? "scale-130 z-40" : "z-20"}`}
-                          >
-                            {/* Pulsing beacon behind the pin */}
-                            <span className={`absolute inline-flex h-8 w-8 rounded-full opacity-40 animate-ping ${hasNoSite ? "bg-amber-500" : "bg-blue-500"}`}></span>
-
-                            {/* Solid visual pin */}
-                            <span className={`relative flex items-center justify-center rounded-full border shadow-md p-1.5 ${
-                              isSelected
-                                ? "bg-indigo-600 border-white text-white scale-110" 
-                                : hasNoSite 
-                                  ? "bg-amber-500 border-amber-300 text-white" 
-                                  : "bg-blue-600 border-blue-300 text-white"
-                            }`}>
-                              <MapPin className="w-4 h-4 shrink-0" />
-                            </span>
-                          </button>
+                    {mapsConfig.hasKey ? (
+                      <iframe
+                        width="100%"
+                        height="100%"
+                        style={{ border: 0 }}
+                        loading="lazy"
+                        allowFullScreen
+                        referrerPolicy="no-referrer-when-downgrade"
+                        src={`https://www.google.com/maps/embed/v1/search?key=${mapsConfig.key}&q=${encodeURIComponent(`${searchNiche || "Padaria"} em ${searchLocation || "São Paulo"}`)}`}
+                      ></iframe>
+                    ) : (
+                      <>
+                        {/* SVG map visual accents/grid */}
+                        <div className="absolute inset-0 opacity-15">
+                          <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+                            <defs>
+                              <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#4F46E5" strokeWidth="1" />
+                              </pattern>
+                            </defs>
+                            <rect width="100%" height="100%" fill="url(#grid)" />
+                          </svg>
                         </div>
-                      );
-                    })}
+
+                        {/* Vector simulated city districts */}
+                        <div className="absolute inset-x-0 inset-y-0 opacity-40 mix-blend-color-dodge pointer-events-none">
+                          <div className="absolute top-[10%] left-[20%] w-32 h-32 rounded-full bg-indigo-500/20 blur-2xl"></div>
+                          <div className="absolute bottom-[15%] right-[25%] w-48 h-48 rounded-full bg-cyan-500/20 blur-3xl"></div>
+                          <div className="absolute top-[40%] right-[10%] w-40 h-40 rounded-full bg-violet-500/10 blur-2xl"></div>
+                        </div>
+
+                        {/* Street maps layout simulation lines */}
+                        <div className="absolute inset-y-0 left-[35%] w-[2px] bg-slate-800/80 pointer-events-none"></div>
+                        <div className="absolute inset-y-0 left-[68%] w-[2px] bg-slate-800/80 pointer-events-none"></div>
+                        <div className="absolute inset-x-0 top-[28%] h-[2px] bg-slate-800/80 pointer-events-none"></div>
+                        <div className="absolute inset-x-0 top-[72%] h-[2px] bg-slate-800/80 pointer-events-none"></div>
+
+                        {/* Central radar scanner wave */}
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[350px] h-[350px] border border-indigo-500/10 rounded-full flex items-center justify-center pointer-events-none">
+                          <div className="w-[200px] h-[200px] border border-indigo-500/20 rounded-full flex items-center justify-center">
+                            <div className="w-[80px] h-[80px] border border-cyan-500/30 rounded-full animate-ping"></div>
+                          </div>
+                        </div>
+
+                        {/* Neighborhood tags */}
+                        <div className="absolute top-[15%] left-[20%] text-[10px] text-indigo-400 font-mono tracking-widest font-bold uppercase select-none opacity-40">Distrito Centro</div>
+                        <div className="absolute top-[45%] left-[72%] text-[10px] text-cyan-400 font-mono tracking-widest font-bold uppercase select-none opacity-40">Região Comercial</div>
+                        <div className="absolute bottom-[18%] left-[45%] text-[10px] text-violet-400 font-mono tracking-widest font-bold uppercase select-none opacity-40">Zona Sul</div>
+
+                        {/* Plotted Interactive Pins */}
+                        {searchResults.map((lead, i) => {
+                          const pos = getPinPosition(lead.id, i, searchResults.length);
+                          const isSelected = selectedMapPin?.id === lead.id;
+                          const hasNoSite = !lead.hasWebsite;
+
+                          return (
+                            <div 
+                              key={lead.id}
+                              className="absolute transition-all duration-350"
+                              style={{ left: pos.left, top: pos.top }}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => setSelectedMapPin(lead)}
+                                className={`relative focus:outline-none flex items-center justify-center cursor-pointer transition-all hover:scale-125 hover:z-50 ${isSelected ? "scale-130 z-40" : "z-20"}`}
+                              >
+                                {/* Pulsing beacon behind the pin */}
+                                <span className={`absolute inline-flex h-8 w-8 rounded-full opacity-40 animate-ping ${hasNoSite ? "bg-amber-500" : "bg-blue-500"}`}></span>
+
+                                {/* Solid visual pin */}
+                                <span className={`relative flex items-center justify-center rounded-full border shadow-md p-1.5 ${
+                                  isSelected
+                                    ? "bg-indigo-600 border-white text-white scale-110" 
+                                    : hasNoSite 
+                                      ? "bg-amber-500 border-amber-300 text-white" 
+                                      : "bg-blue-600 border-blue-300 text-white"
+                                }`}>
+                                  <MapPin className="w-4 h-4 shrink-0" />
+                                </span>
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </>
+                    )}
 
                     {/* Selected map tooltips popover card */}
                     {selectedMapPin && (

@@ -284,6 +284,16 @@ app.get("/api/config/payment", (req, res) => {
   });
 });
 
+// GET GOOGLE MAPS CONFIGURATION
+app.get("/api/config/maps", (req, res) => {
+  const mapsKey = process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_PLATFORM_KEY || "";
+  const isConfigured = !!mapsKey && mapsKey !== "YOUR_API_KEY" && mapsKey !== "";
+  res.json({
+    hasKey: isConfigured,
+    key: isConfigured ? mapsKey : ""
+  });
+});
+
 // ----------------------------------------------------
 // ASAAS INTEGRATED BILLING & WEBHOOK ENGINE
 // ----------------------------------------------------

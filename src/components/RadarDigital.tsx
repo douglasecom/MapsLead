@@ -11,12 +11,68 @@ interface RadarDigitalProps {
   triggerNotification: (msg: string, type: 'success' | 'error' | 'info') => void;
 }
 
+const defaultSeeds: Lead[] = [
+  {
+    id: "seed_1",
+    name: "Padaria e Confeitaria Estrela do Brás",
+    niche: "Padaria",
+    location: "São Paulo, SP",
+    rating: 4.6,
+    reviews: 850,
+    hasWebsite: false,
+    hasGmbActive: true,
+    hasPhone: true,
+    phone: "(11) 3228-4512",
+    leadScore: 92,
+    captured: true,
+    status: 'novo',
+    gmbAnalysis: "Excelente panificadora com 850 avaliações de clientes fiéis na região, porém não possui Website próprio. Perde dezenas de pedidos diários de coffee breaks e eventos.",
+    avatarColor: "bg-[#FEF3C7] text-[#D97706]"
+  },
+  {
+    id: "seed_2",
+    name: "Dra. Amanda Silva - Odontologia Integrada",
+    niche: "Dentista",
+    location: "Rio de Janeiro, RJ",
+    rating: 4.3,
+    reviews: 132,
+    hasWebsite: true,
+    hasGmbActive: true,
+    hasPhone: true,
+    phone: "(21) 2544-9080",
+    leadScore: 78,
+    captured: true,
+    status: 'novo',
+    gmbAnalysis: "Clínica de odontologia estética com site ativo, mas com sérios gargalos de carregamento (SEO Mobile de 5.8s) e sem tag do Meta Pixel para capturar anúncios locais.",
+    avatarColor: "bg-teal-100 text-teal-850"
+  },
+  {
+    id: "seed_3",
+    name: "Precision Auto Mecânica & Centro Técnico",
+    niche: "Mecânica",
+    location: "Belo Horizonte, MG",
+    rating: 4.1,
+    reviews: 64,
+    hasWebsite: false,
+    hasGmbActive: false,
+    hasPhone: true,
+    phone: "(31) 3450-4011",
+    leadScore: 95,
+    captured: true,
+    status: 'novo',
+    gmbAnalysis: "Mecânica automotiva com ficha Google não reivindicada e total ausência de rede social ou site próprio. Altamente vulnerável a suspensão do perfil e perda de visibilidade.",
+    avatarColor: "bg-blue-100 text-blue-800"
+  }
+];
+
 export const RadarDigital: React.FC<RadarDigitalProps> = ({ leads, triggerNotification }) => {
-  const capturedLeads = leads.filter(l => l.captured);
-  const [selectedLeadId, setSelectedLeadId] = useState<string>(capturedLeads[0]?.id || '');
+  const userCapturedLeads = leads.filter(l => l.captured);
+  const capturedLeads = userCapturedLeads.length > 0 ? userCapturedLeads : defaultSeeds;
+  
+  const [selectedLeadId, setSelectedLeadId] = useState<string>('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  const activeLead = leads.find(l => l.id === selectedLeadId) || capturedLeads[0];
+  const activeLead = capturedLeads.find(l => l.id === selectedLeadId) || capturedLeads[0];
 
   const handleRunAuditSweep = () => {
     setIsAnalyzing(true);

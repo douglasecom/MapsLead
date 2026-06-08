@@ -832,7 +832,17 @@ export const ComercialDash: React.FC<ComercialDashProps> = ({
                     {payments.map((p) => (
                       <tr key={p.id} className="border-b font-semibold text-slate-700 last:border-0 hover:bg-slate-50 transition-colors">
                         <td className="py-3 text-left font-mono text-[10px] text-indigo-650">{p.id}</td>
-                        <td className="py-3 text-center">{p.date ? new Date(p.date).toLocaleDateString() : "-"}</td>
+                        <td className="py-3 text-center">
+                          {(() => {
+                            if (!p.date) return "-";
+                            try {
+                              const d = new Date(p.date);
+                              return isNaN(d.getTime()) ? "-" : d.toLocaleDateString('pt-BR');
+                            } catch (err) {
+                              return "-";
+                            }
+                          })()}
+                        </td>
                         <td className="py-3 text-center font-mono text-slate-900 font-bold">R$ {(p.amount || 0).toFixed(2)}</td>
                         <td className="py-3 text-center uppercase text-[10px]"><span className="bg-slate-100 px-2 py-0.5 rounded text-slate-700 font-mono font-bold">{p.method || "PIX"}</span></td>
                         <td className="py-3 text-right"><a href={p.link || "#"} target="_blank" rel="noreferrer" className="text-blue-600 font-bold hover:underline">Download PDF</a></td>
