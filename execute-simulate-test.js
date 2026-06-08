@@ -20,7 +20,8 @@ async function main() {
   // 2. Initialize Firebase SDK client
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
-  const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+  const dbId = firebaseConfig.firestoreDatabaseId || "ai-studio-07fa01e6-d6a1-4d4e-b05a-262a2373f3d7";
+  const db = getFirestore(app, dbId);
 
   const testEmail = "douglas_teste@adshive.com";
   const testPassword = "AdshiveTestPassword2026!";

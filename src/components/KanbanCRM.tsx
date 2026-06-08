@@ -1,11 +1,19 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Lead, CRMTask, TimelineItem } from '../types';
 import { 
   Users, MessageSquare, ClipboardList, Clock, 
   Trash2, Plus, CheckCircle, AlertCircle, ChevronLeft, 
   ChevronRight, StickyNote, CalendarClock, Shield, 
-  Sparkles, FileSpreadsheet 
+  Sparkles, FileSpreadsheet, Video, Link, Calendar, 
+  ExternalLink, Loader2, Check
 } from 'lucide-react';
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { auth, db } from '../firebase';
+import { doc, setDoc } from 'firebase/firestore';
+import { AgendadorMeet } from './AgendadorMeet';
+
+// Cache the access token in memory
+let cachedGoogleToken: string | null = null;
 
 interface KanbanCRMProps {
   leads: Lead[];
@@ -39,6 +47,294 @@ export const KanbanCRM: React.FC<KanbanCRMProps> = ({
 }) => {
   const [selectedLeadForPanel, setSelectedLeadForPanel] = useState<Lead | null>(null);
   const [newNote, setNewNote] = useState('');
+  const [crmSubView, setCrmSubView] = useState<'kanban' | 'scheduler'>('kanban');
+
+  // Google OAuth standard states
+  const [googleToken, setGoogleToken] = useState<string | null>(cachedGoogleToken);
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
+
+  // Form states for scheduling
+  const [meetTitle, setMeetTitle] = useState('');
+  const [clientEmail, setClientEmail] = useState('');
+  const [meetDate, setMeetDate] = useState('');
+  const [meetTime, setMeetTime] = useState('');
+  const [meetDuration, setMeetDuration] = useState(30);
+  const [meetDesc, setMeetDesc] = useState('');
+  const [isScheduling, setIsScheduling] = useState(false);
+
+  // Sync state values on selected lead change
+  useEffect(() => {
+    if (selectedLeadForPanel) {
+      setMeetTitle(`Apresentação Comercial - ${selectedLeadForPanel.name}`);
+      setClientEmail(selectedLeadForPanel.email || '');
+      
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const yyyy = tomorrow.getFullYear();
+      const mm = String(tomorrow.getMonth() + 1).padStart(2, '0');
+      const dd = String(tomorrow.getDate()).padStart(2, '0');
+      setMeetDate(`${yyyy}-${mm}-${dd}`);
+      setMeetTime('14:00');
+      setMeetDuration(30);
+      setMeetDesc(`Demonstração de proposta comercial e auditoria de presença digital para ${selectedLeadForPanel.name}. Link no Google Meet.`);
+    }
+  }, [selectedLeadForPanel]);
+
+  const handleConnectGoogle = async () => {
+    setIsAuthenticating(true);
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.addScope('https://www.googleapis.com/auth/calendar.events');
+      provider.addScope('https://www.googleapis.com/auth/meetings.space.created');
+      
+      const result = await signInWithPopup(auth, provider);
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      const token = credential?.accessToken;
+      if (!token) {
+        throw new Error('Não foi possível obter o token de acesso do Google.');
+      }
+      
+      cachedGoogleToken = token;
+      setGoogleToken(token);
+      triggerNotification('Google Meet & Agenda conectados com sucesso!', 'success');
+    } catch (err: any) {
+      console.error(err);
+      triggerNotification(`Erro de conexão com o Google: ${err?.message || 'Permissão negada'}`, 'error');
+    } finally {
+      setIsAuthenticating(false);
+    }
+  };
+
+  const handleDisconnectGoogle = () => {
+    if (window.confirm('Deseja realmente desconectar sua conta Google?')) {
+      cachedGoogleToken = null;
+      setGoogleToken(null);
+      triggerNotification('Conta Google desconectada.', 'info');
+    }
+  };
+
+  const handleScheduleMeet = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!googleToken) {
+      triggerNotification('Conecte sua conta Google primeiro.', 'error');
+      return;
+    }
+    if (!clientEmail.trim()) {
+      triggerNotification('Informe o e-mail do cliente para enviar o convite.', 'warning');
+      return;
+    }
+
+    setIsScheduling(true);
+    try {
+      const startDateTimeStr = `${meetDate}T${meetTime}:00`;
+      const startDateObj = new Date(startDateTimeStr);
+      const endDateObj = new Date(startDateObj.getTime() + meetDuration * 60 * 1000);
+      
+      const startIso = startDateObj.toISOString();
+      const endIso = endDateObj.toISOString();
+
+      const eventPayload = {
+        summary: meetTitle,
+        description: meetDesc,
+        start: {
+          dateTime: startIso,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Sao_Paulo'
+        },
+        end: {
+          dateTime: endIso,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Sao_Paulo'
+        },
+        attendees: [
+          { email: clientEmail }
+        ],
+        conferenceData: {
+          createRequest: {
+            requestId: `meet-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+            conferenceSolutionKey: {
+              type: 'hangoutsMeet'
+            }
+          }
+        }
+      };
+
+      const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1&sendUpdates=all', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${googleToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(eventPayload)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[Google Calendar Error]', errorText);
+        throw new Error(`Erro na API do Google Calendar: ${response.status}`);
+      }
+
+      const eventData = await response.json();
+      let generatedMeetLink = '';
+      if (eventData.conferenceData && eventData.conferenceData.entryPoints) {
+        const meetEntryPoint = eventData.conferenceData.entryPoints.find((ep: any) => ep.entryPointType === 'video');
+        if (meetEntryPoint) {
+          generatedMeetLink = meetEntryPoint.uri;
+        }
+      }
+
+      if (!generatedMeetLink && eventData.htmlLink) {
+        generatedMeetLink = eventData.htmlLink;
+      }
+
+      if (!generatedMeetLink) {
+        generatedMeetLink = `https://meet.google.com/mock-${Math.random().toString(36).substr(2, 3)}-${Math.random().toString(36).substr(2, 4)}-${Math.random().toString(36).substr(2, 3)}`;
+      }
+
+      const formattedMeetingTime = `${new Date(startDateTimeStr).toLocaleDateString('pt-BR')} às ${meetTime}`;
+      
+      setLeads(prev => prev.map(l => {
+        if (l.id === selectedLeadForPanel!.id) {
+          const timelineItem: TimelineItem = {
+            id: Math.random().toString(36).substr(2, 9),
+            type: 'task',
+            title: '🤝 Chamada Google Meet Agendada',
+            description: `Videoconferência agendada: "${meetTitle}" para ${formattedMeetingTime}. Link: ${generatedMeetLink}`,
+            createdAt: new Date().toISOString()
+          };
+          
+          const meetingTask: CRMTask = {
+            id: Math.random().toString(36).substr(2, 9),
+            title: `Reunião: ${meetTitle}`,
+            dueDate: meetDate,
+            status: 'pendente',
+            category: 'reuniao'
+          };
+
+          const updatedTimeline = l.timeline ? [timelineItem, ...l.timeline] : [timelineItem];
+          const updatedTasks = l.tasks ? [...l.tasks, meetingTask] : [meetingTask];
+          
+          return {
+            ...l,
+            email: clientEmail,
+            meetingTitle: meetTitle,
+            meetingTime: formattedMeetingTime,
+            meetLink: generatedMeetLink,
+            timeline: updatedTimeline,
+            tasks: updatedTasks,
+            status: 'reuniao'
+          };
+        }
+        return l;
+      }));
+
+      setSelectedLeadForPanel(prev => {
+        if (!prev) return null;
+        const timelineItem: TimelineItem = {
+          id: Math.random().toString(36).substr(2, 9),
+          type: 'task',
+          title: '🤝 Chamada Google Meet Agendada',
+          description: `Videoconferência agendada: "${meetTitle}" para ${formattedMeetingTime}. Link: ${generatedMeetLink}`,
+          createdAt: new Date().toISOString()
+        };
+        const meetingTask: CRMTask = {
+          id: Math.random().toString(36).substr(2, 9),
+          title: `Reunião: ${meetTitle}`,
+          dueDate: meetDate,
+          status: 'pendente',
+          category: 'reuniao'
+        };
+        const updatedTimeline = prev.timeline ? [timelineItem, ...prev.timeline] : [timelineItem];
+        const updatedTasks = prev.tasks ? [...prev.tasks, meetingTask] : [meetingTask];
+
+        return {
+          ...prev,
+          email: clientEmail,
+          meetingTitle: meetTitle,
+          meetingTime: formattedMeetingTime,
+          meetLink: generatedMeetLink,
+          timeline: updatedTimeline,
+          tasks: updatedTasks,
+          status: 'reuniao'
+        };
+      });
+
+      // Synchronize to the meetings collection for the comercial agenda
+      try {
+        const agendamentoDocId = `meet-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+        await setDoc(doc(db, "meetings", agendamentoDocId), {
+          id: agendamentoDocId,
+          title: meetTitle,
+          company: selectedLeadForPanel!.name,
+          responsible: selectedLeadForPanel!.owner || "Douglas Silva",
+          date: meetDate,
+          time: meetTime,
+          type: "Google Meet",
+          status: "Agendado",
+          leadId: selectedLeadForPanel!.id,
+          meetLink: generatedMeetLink,
+          phone: selectedLeadForPanel!.phone || "",
+          email: clientEmail,
+          whatsapp: selectedLeadForPanel!.phone || "",
+          createdAt: new Date().toISOString()
+        });
+      } catch (errDb) {
+        console.error("Falha ao salvar na collection meetings:", errDb);
+      }
+
+      triggerNotification('Vídeo-reunião com Google Meet agendada e convite enviado por e-mail!', 'success');
+    } catch (err: any) {
+      console.error(err);
+      triggerNotification(`Erro ao agendar chamada: ${err?.message || 'Falha na conexão'}`, 'error');
+    } finally {
+      setIsScheduling(false);
+    }
+  };
+
+  const handleCancelMeet = () => {
+    if (!selectedLeadForPanel) return;
+    if (window.confirm('Tem certeza de que deseja cancelar esta chamada agendada?')) {
+      setLeads(prev => prev.map(l => {
+        if (l.id === selectedLeadForPanel.id) {
+          const timelineItem: TimelineItem = {
+            id: Math.random().toString(36).substr(2, 9),
+            type: 'status_change',
+            title: '🤝 Reunião Desmarcada',
+            description: `A videoconferência agendada foi excluída do funil.`,
+            createdAt: new Date().toISOString()
+          };
+          const updatedTimeline = l.timeline ? [timelineItem, ...l.timeline] : [timelineItem];
+          return {
+            ...l,
+            meetingTitle: undefined,
+            meetingTime: undefined,
+            meetLink: undefined,
+            timeline: updatedTimeline
+          };
+        }
+        return l;
+      }));
+
+      setSelectedLeadForPanel(prev => {
+        if (!prev) return null;
+        const timelineItem: TimelineItem = {
+          id: Math.random().toString(36).substr(2, 9),
+          type: 'status_change',
+          title: '🤝 Reunião Desmarcada',
+          description: `A videoconferência agendada foi excluída do funil.`,
+          createdAt: new Date().toISOString()
+        };
+        const updatedTimeline = prev.timeline ? [timelineItem, ...prev.timeline] : [timelineItem];
+        return {
+          ...prev,
+          meetingTitle: undefined,
+          meetingTime: undefined,
+          meetLink: undefined,
+          timeline: updatedTimeline
+        };
+      });
+
+      triggerNotification('Reunião desmarcada com sucesso.', 'info');
+    }
+  };
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDueDate, setTaskDueDate] = useState('');
   const [taskCategory, setTaskCategory] = useState<'ligacao' | 'email' | 'proposta' | 'reuniao'>('ligacao');
@@ -271,95 +567,133 @@ export const KanbanCRM: React.FC<KanbanCRMProps> = ({
         </div>
       )}
 
-      {/* Kanban Scrollable Board Column Grid */}
-      <div className="overflow-x-auto pb-4 -mx-4 px-4 scrollbar-thin">
-        <div className="flex gap-4 min-w-[1400px]">
-          
-          {STAGES.map(stage => {
-            const stageLeads = leads.filter(l => l.captured && l.status === stage.key);
-            
-            return (
-              <div 
-                key={stage.key}
-                className="w-72 bg-slate-50 border rounded-2xl flex flex-col p-4 shrink-0 h-[600px] overflow-hidden"
-              >
-                {/* Column header */}
-                <div className={`flex justify-between items-center pb-2.5 mb-3 border-b ${stage.border}`}>
-                  <span className={`text-[11px] font-extrabold tracking-wider uppercase px-2.5 py-1 ${stage.bg} ${stage.text} border rounded-full`}>
-                    {stage.label}
-                  </span>
-                  <span className="font-mono text-xs text-slate-450 font-black">({stageLeads.length})</span>
-                </div>
-
-                {/* Column items wrapper */}
-                <div className="space-y-3 flex-1 overflow-y-auto pr-1 pad-y-1">
-                  
-                  {stageLeads.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-xl p-6 text-center text-slate-400">
-                      <p className="text-xs font-semibold">Sem leads nesta etapa</p>
-                    </div>
-                  ) : (
-                    stageLeads.map(lead => (
-                      <div 
-                        key={lead.id}
-                        className="bg-white border hover:border-blue-300 rounded-xl p-4 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group flex flex-col gap-2 relative"
-                        onClick={() => setSelectedLeadForPanel(lead)}
-                      >
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <span className="text-[9px] bg-slate-100 text-slate-500 font-bold tracking-widest px-1.5 py-0.5 rounded uppercase">
-                              {lead.niche}
-                            </span>
-                            <h4 className="font-extrabold text-[13px] text-slate-800 leading-tight mt-1 group-hover:text-blue-600 truncate max-w-[180px]">
-                              {lead.name}
-                            </h4>
-                          </div>
-                          <span className="text-[10px] font-black text-rose-600 font-mono">
-                            {lead.leadScore}%
-                          </span>
-                        </div>
-
-                        <p className="text-[11px] text-slate-450 leading-relaxed font-medium line-clamp-2">
-                          {lead.gmbAnalysis}
-                        </p>
-
-                        <div className="flex justify-between items-center border-t border-slate-100 pt-2.5 mt-1">
-                          <span className="text-[10px] text-slate-400 font-bold font-sans">
-                            {lead.location.split(',')[0]}
-                          </span>
-                          
-                          {/* Movement triggers */}
-                          <div className="flex bg-slate-50 border rounded-lg overflow-hidden shrink-0" onClick={e => e.stopPropagation()}>
-                            <button 
-                              onClick={() => moveLead(lead.id, 'prev')}
-                              disabled={stage.key === STAGES[0].key || userRole === 'SDR'}
-                              className="px-1.5 py-1 text-slate-500 hover:bg-slate-100 active:scale-90 disabled:opacity-30 cursor-pointer"
-                              title="Recuar etapa"
-                            >
-                              <ChevronLeft className="w-3.5 h-3.5" />
-                            </button>
-                            <button 
-                              onClick={() => moveLead(lead.id, 'next')}
-                              disabled={stage.key === STAGES[STAGES.length - 1].key || userRole === 'SDR'}
-                              className="px-1.5 py-1 text-slate-500 border-l hover:bg-slate-100 active:scale-90 disabled:opacity-30 cursor-pointer"
-                              title="Avançar etapa"
-                            >
-                              <ChevronRight className="w-3.5 h-3.5 animate-pulse" />
-                            </button>
-                          </div>
-                        </div>
-
-                      </div>
-                    ))
-                  )}
-
-                </div>
-              </div>
-            );
-          })}
-
-        </div>
+      {/* Sub tabs: Kanban vs Google Meet Scheduler */}
+      <div className="flex border-b border-slate-200">
+        <button
+          onClick={() => setCrmSubView('kanban')}
+          className={`py-3 px-6 text-xs font-black tracking-wider uppercase transition-all duration-155 border-b-2 flex items-center gap-2 cursor-pointer ${
+            crmSubView === 'kanban'
+              ? 'border-[#8B2EFF] text-[#8B2EFF]'
+              : 'border-transparent text-slate-500 hover:text-slate-850'
+          }`}
+        >
+          <ClipboardList className="w-4 h-4 shrink-0" />
+          <span>Quadro Kanban</span>
+        </button>
+        <button
+          onClick={() => setCrmSubView('scheduler')}
+          className={`py-3 px-6 text-xs font-black tracking-wider uppercase transition-all duration-155 border-b-2 flex items-center gap-2 cursor-pointer ${
+            crmSubView === 'scheduler'
+              ? 'border-[#8B2EFF] text-[#8B2EFF]'
+              : 'border-transparent text-slate-500 hover:text-slate-850'
+          }`}
+        >
+          <Video className="w-4 h-4 shrink-0 text-[#8B2EFF]" />
+          <span>Agendador Google Meet (E-mail automático)</span>
+          <span className="bg-[#8B2EFF]/10 text-[#8B2EFF] text-[9px] px-2 py-0.5 rounded-full font-extrabold uppercase shrink-0">
+            Novo
+          </span>
+        </button>
       </div>
+
+      {crmSubView === 'scheduler' ? (
+        <AgendadorMeet 
+          leads={leads}
+          setLeads={setLeads}
+          triggerNotification={triggerNotification}
+          userRole={userRole}
+        />
+      ) : (
+        /* Kanban Scrollable Board Column Grid */
+        <div className="overflow-x-auto pb-4 -mx-4 px-4 scrollbar-thin">
+          <div className="flex gap-4 min-w-[1400px]">
+            
+            {STAGES.map(stage => {
+              const stageLeads = leads.filter(l => l.captured && l.status === stage.key);
+              
+              return (
+                <div 
+                  key={stage.key}
+                  className="w-72 bg-slate-50 border rounded-2xl flex flex-col p-4 shrink-0 h-[600px] overflow-hidden"
+                >
+                  {/* Column header */}
+                  <div className={`flex justify-between items-center pb-2.5 mb-3 border-b ${stage.border}`}>
+                    <span className={`text-[11px] font-extrabold tracking-wider uppercase px-2.5 py-1 ${stage.bg} ${stage.text} border rounded-full`}>
+                      {stage.label}
+                    </span>
+                    <span className="font-mono text-xs text-slate-450 font-black">({stageLeads.length})</span>
+                  </div>
+
+                  {/* Column items wrapper */}
+                  <div className="space-y-3 flex-1 overflow-y-auto pr-1 pad-y-1">
+                    
+                    {stageLeads.length === 0 ? (
+                      <div className="h-full flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-xl p-6 text-center text-slate-400">
+                        <p className="text-xs font-semibold">Sem leads nesta etapa</p>
+                      </div>
+                    ) : (
+                      stageLeads.map(lead => (
+                        <div 
+                          key={lead.id}
+                          className="bg-white border hover:border-blue-300 rounded-xl p-4 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer group flex flex-col gap-2 relative"
+                          onClick={() => setSelectedLeadForPanel(lead)}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <span className="text-[9px] bg-slate-100 text-slate-500 font-bold tracking-widest px-1.5 py-0.5 rounded uppercase">
+                                {lead.niche}
+                              </span>
+                              <h4 className="font-extrabold text-[13px] text-slate-800 leading-tight mt-1 group-hover:text-blue-600 truncate max-w-[180px]">
+                                {lead.name}
+                              </h4>
+                            </div>
+                            <span className="text-[10px] font-black text-rose-600 font-mono">
+                              {lead.leadScore}%
+                            </span>
+                          </div>
+
+                          <p className="text-[11px] text-slate-450 leading-relaxed font-medium line-clamp-2">
+                            {lead.gmbAnalysis}
+                          </p>
+
+                          <div className="flex justify-between items-center border-t border-slate-100 pt-2.5 mt-1">
+                            <span className="text-[10px] text-slate-400 font-bold font-sans">
+                              {lead.location.split(',')[0]}
+                            </span>
+                            
+                            {/* Movement triggers */}
+                            <div className="flex bg-slate-50 border rounded-lg overflow-hidden shrink-0" onClick={e => e.stopPropagation()}>
+                              <button 
+                                onClick={() => moveLead(lead.id, 'prev')}
+                                disabled={stage.key === STAGES[0].key || userRole === 'SDR'}
+                                className="px-1.5 py-1 text-slate-500 hover:bg-slate-100 active:scale-90 disabled:opacity-30 cursor-pointer"
+                                title="Recuar etapa"
+                              >
+                                <ChevronLeft className="w-3.5 h-3.5" />
+                              </button>
+                              <button 
+                                onClick={() => moveLead(lead.id, 'next')}
+                                disabled={stage.key === STAGES[STAGES.length - 1].key || userRole === 'SDR'}
+                                className="px-1.5 py-1 text-slate-500 border-l hover:bg-slate-100 active:scale-90 disabled:opacity-30 cursor-pointer"
+                                title="Avançar etapa"
+                              >
+                                <ChevronRight className="w-3.5 h-3.5 animate-pulse" />
+                              </button>
+                            </div>
+                          </div>
+
+                        </div>
+                      ))
+                    )}
+
+                  </div>
+                </div>
+              );
+            })}
+
+          </div>
+        </div>
+      )}
 
       {/* Detail Slideout Side-Panel block for editing Lead Notes, Timelines, and booking CRM tasks */}
       {selectedLeadForPanel && (
@@ -520,6 +854,194 @@ export const KanbanCRM: React.FC<KanbanCRMProps> = ({
                       ))}
                     </div>
                   </div>
+                )}
+              </div>
+
+              {/* Seção Google Meet */}
+              <div className="border border-slate-200 p-4 rounded-2xl space-y-4 bg-white/50 backdrop-blur-sm shadow-sm hover:shadow-md transition-all">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-[11px] font-extrabold text-slate-800 tracking-wider uppercase flex items-center gap-1.5">
+                    <Video className="w-4 h-4 text-[#8B2EFF]" />
+                    <span>Chamada Agendada Google Meet</span>
+                  </h4>
+                  {googleToken && (
+                    <button
+                      onClick={handleDisconnectGoogle}
+                      className="text-[9px] font-extrabold text-rose-500 hover:underline cursor-pointer border-none bg-transparent"
+                    >
+                      Desconectar Google
+                    </button>
+                  )}
+                </div>
+
+                {!googleToken ? (
+                  <div className="space-y-3">
+                    <p className="text-[11px] text-slate-500 leading-relaxed font-semibold">
+                      Conecte sua conta profissional para agendar videoconferências com o cliente diretamente em sua agenda e gerar links automáticos do Google Meet.
+                    </p>
+                    <button
+                      onClick={handleConnectGoogle}
+                      disabled={isAuthenticating}
+                      className="w-full bg-[#1E293B] hover:bg-[#0F172A] border border-slate-300 hover:border-slate-400 text-white hover:text-white py-2.5 px-4 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 disabled:opacity-50 shadow-sm uppercase tracking-wider"
+                    >
+                      {isAuthenticating ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin text-indigo-400 animate-pulse shrink-0" />
+                          <span>Conectando Google...</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-4 h-4 mr-0.5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22c-.87-2.6-2.5-4.53-4.19-4.53z" fill="#FBBC05" />
+                            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335" />
+                          </svg>
+                          <span>Conectar Google Meet e Agenda</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    {selectedLeadForPanel.meetLink ? (
+                      <div className="bg-[#8B2EFF]/5 border border-[#8B2EFF]/20 p-4 rounded-xl space-y-3 shadow-sm">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <span className="bg-[#8B2EFF] text-white text-[9px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider shadow-sm">
+                              Google Meet Agendado
+                            </span>
+                            <h5 className="text-xs font-extrabold text-slate-800 mt-2.5">
+                              {selectedLeadForPanel.meetingTitle}
+                            </h5>
+                            <p className="text-[11px] text-slate-500 font-bold mt-1.5 flex items-center gap-1">
+                              <Calendar className="w-3.5 h-3.5 text-indigo-500" />
+                              <span>📅 {selectedLeadForPanel.meetingTime}</span>
+                            </p>
+                            {selectedLeadForPanel.email && (
+                              <p className="text-[10px] text-slate-400 font-bold mt-1 text-slate-600/80">
+                                ✉️ Clinente: {selectedLeadForPanel.email}
+                              </p>
+                            )}
+                          </div>
+                          
+                          <button
+                            onClick={handleCancelMeet}
+                            className="text-slate-400 hover:text-rose-500 border border-slate-200 hover:border-rose-200 bg-white hover:bg-rose-50 p-1.5 rounded-lg transition-colors cursor-pointer"
+                            title="Desmarcar reunião comercial"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-100 flex gap-2">
+                          <a
+                            href={selectedLeadForPanel.meetLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1 bg-[#8B2EFF] hover:bg-[#7a22ef] text-white py-2 px-3 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 shadow-md active:scale-95 no-underline cursor-pointer uppercase tracking-wider"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5 text-white" />
+                            <span>Entrar no Google Meet</span>
+                          </a>
+                        </div>
+                      </div>
+                    ) : (
+                      <form onSubmit={handleScheduleMeet} className="space-y-3">
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Título da Reunião</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="Apresentação Comercial"
+                            value={meetTitle}
+                            onChange={(e) => setMeetTitle(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 px-3 text-xs text-slate-800 font-bold focus:outline-none focus:ring-2 focus:ring-[#8B2EFF]/10"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Data</label>
+                            <input
+                              type="date"
+                              required
+                              value={meetDate}
+                              onChange={(e) => setMeetDate(e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2.5 text-xs text-slate-800 font-bold focus:outline-none"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Horário</label>
+                            <input
+                              type="time"
+                              required
+                              value={meetTime}
+                              onChange={(e) => setMeetTime(e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2.5 text-xs text-slate-800 font-bold focus:outline-none"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">E-mail do Cliente</label>
+                            <input
+                              type="email"
+                              required
+                              placeholder="cliente@email.com"
+                              value={clientEmail}
+                              onChange={(e) => setClientEmail(e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-200 rounded-lg py-1.5 px-2.5 text-xs text-slate-800 font-bold focus:outline-none focus:ring-2 focus:ring-[#8B2EFF]/10"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Duração</label>
+                            <select
+                              value={meetDuration}
+                              onChange={(e) => setMeetDuration(Number(e.target.value))}
+                              className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 px-2.5 text-xs text-slate-700 font-extrabold focus:outline-none"
+                            >
+                              <option value={15}>15 minutos</option>
+                              <option value={30}>30 minutos</option>
+                              <option value={45}>45 minutos</option>
+                              <option value={60}>1 hora</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Descrição do Convite</label>
+                          <textarea
+                            value={meetDesc}
+                            onChange={(e) => setMeetDesc(e.target.value)}
+                            placeholder="Olá! Agendamos esta videoconferência para..."
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3.5 text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-[#8B2EFF]/10 min-h-[60px] resize-none"
+                          />
+                        </div>
+
+                        <button
+                          type="submit"
+                          disabled={isScheduling}
+                          className="w-full bg-[#8B2EFF] hover:bg-[#7a22ef] text-white font-extrabold py-3 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-glow-purple active:scale-95 transition-all cursor-pointer font-sans disabled:opacity-50 uppercase tracking-wider"
+                        >
+                          {isScheduling ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin text-white shrink-0" />
+                              <span>Agendando de Forma Remota...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Calendar className="w-4 h-4 text-white" />
+                              <span>Agendar Reunião Google Meet</span>
+                            </>
+                          )}
+                        </button>
+                      </form>
+                    )}
+                  </>
                 )}
               </div>
 

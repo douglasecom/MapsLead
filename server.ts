@@ -27,7 +27,8 @@ try {
   if (fs.existsSync(configPath)) {
     const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf8"));
     const fbApp = initializeApp(firebaseConfig);
-    db = getFirestore(fbApp, firebaseConfig.firestoreDatabaseId);
+    const dbId = firebaseConfig.firestoreDatabaseId || "ai-studio-07fa01e6-d6a1-4d4e-b05a-262a2373f3d7";
+    db = getFirestore(fbApp, dbId);
     console.log("Firebase initialized successfully on server-side.");
     seedPlans();
 
@@ -652,6 +653,7 @@ app.post("/api/asaas/buy-ai-package", async (req, res) => {
  * GET TEMP VALIDATION FOR ASAAS WEBHOOK
  */
 app.get("/api/webhooks/asaas", (req, res) => {
+  console.log("Webhook recebido (GET de teste)");
   res.json({
     status: "ok",
     service: "asaas-webhook",
@@ -663,6 +665,7 @@ app.get("/api/webhooks/asaas", (req, res) => {
  * RECEIVE REAL ASAAS WEBHOOK ENDPOINT
  */
 app.post("/api/webhooks/asaas", async (req, res) => {
+  console.log("Webhook recebido (POST real)");
   const { event, payment, subscription } = req.body;
   const token = req.headers["asaas-access-token"] || req.headers["authorization"];
   const expectedToken = process.env.ASAAS_WEBHOOK_TOKEN;
@@ -870,7 +873,10 @@ app.post("/api/webhooks/asaas/simulate", async (req, res) => {
     const url = `http://localhost:3000/api/webhooks/asaas`;
     const response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json",
+        "asaas-access-token": process.env.ASAAS_WEBHOOK_TOKEN || ""
+      },
       body: JSON.stringify(payload)
     });
     
@@ -887,150 +893,142 @@ app.post("/api/webhooks/asaas/simulate", async (req, res) => {
 
 // GENERATE MATCHING LEADS DYNAMICALLY
 app.post("/api/leads/generate", async (req, res) => {
-  const { niche, location, limit = 10 } = req.body;
+  try {
+    const { niche, location, limit = 10 } = req.body || {};
+    const limitValue = Math.max(1, Math.min(Math.round(Number(limit)) || 10, 20));
 
-  const resolvedNiche = niche || "Padaria";
-  const resolvedLocation = location || "São Paulo, SP";
+    const resolvedNiche = niche || "Padaria";
+    const resolvedLocation = location || "São Paulo, SP";
 
-  // Check if real Google Maps API Key is provisioned to fetch real live B2B businesses
-  const googleMapsKey = process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_PLATFORM_KEY;
-  if (googleMapsKey && googleMapsKey !== "YOUR_API_KEY" && googleMapsKey !== "") {
+    // Enforce real Google Maps API Key
+    const googleMapsKey = process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_PLATFORM_KEY;
+    if (!googleMapsKey || googleMapsKey === "YOUR_API_KEY" || googleMapsKey.trim() === "") {
+      return res.status(400).json({
+        error: "Configuração ausente: A chave de API do Google Maps (GOOGLE_MAPS_API_KEY) não está configurada no ambiente. Adicione a chave real na página de configurações para realizar buscas ativas."
+      });
+    }
+
+    console.log(`[Google Maps Integration] Starting search: "${resolvedNiche}" em "${resolvedLocation}"`);
+
+    // 1. Google Geocoding API Call (Retrieve Lat/Lng)
+    let lat: number | null = null;
+    let lng: number | null = null;
+
     try {
-      console.log(`[Google Maps API] Fetching real places for: "${resolvedNiche} em ${resolvedLocation}"`);
-      const textQuery = `${resolvedNiche} em ${resolvedLocation}`;
-      const url = "https://places.googleapis.com/v1/places:searchText";
+      console.log(`[Google Geocoding API] Resolving coordinates for: "${resolvedLocation}"`);
+      const geocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(resolvedLocation)}&key=${googleMapsKey}`;
+      const geocodeResponse = await fetch(geocodeUrl);
       
-      const gMapsResponse = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Goog-Api-Key": googleMapsKey,
-          "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.websiteUri,places.nationalPhoneNumber,places.rating,places.userRatingCount,places.types"
-        },
-        body: JSON.stringify({
-          textQuery,
-          languageCode: "pt-BR",
-          maxResultCount: Math.min(Number(limit) || 10, 20)
-        })
-      });
+      if (!geocodeResponse.ok) {
+        const errorText = await geocodeResponse.text();
+        throw new Error(`Google Geocoding API respondeu com status ${geocodeResponse.status}: ${errorText}`);
+      }
 
-      if (gMapsResponse.ok) {
-        const data = (await gMapsResponse.json()) as any;
-        if (data.places && Array.isArray(data.places) && data.places.length > 0) {
-          const realLeads = data.places.map((place: any) => {
-            const name = place.displayName?.text || "Negócio sem Nome";
-            const rating = place.rating || parseFloat((Math.random() * 1.5 + 3.4).toFixed(1));
-            const reviews = place.userRatingCount || Math.floor(Math.random() * 180) + 12;
-            const hasWebsite = !!place.websiteUri;
-            const hasPhone = !!place.nationalPhoneNumber;
-            const phone = place.nationalPhoneNumber || "";
-
-            // Custom score formula: lack of website increases opportunity score!
-            let score = 55;
-            if (!hasWebsite) score += 30;
-            if (rating >= 4.4) score += 10;
-            if (reviews > 100) score += 5;
-
-            const gmbAnalysis = !hasWebsite
-              ? `Empresa real localizada em ${place.formattedAddress || resolvedLocation}. Possui excelente aprovação local (${rating}★ com ${reviews} avaliações espontâneas), mas NÃO possui Website próprio. Perde faturamento por falta de funil próprio.`
-              : `Empresa real localizada em ${place.formattedAddress || resolvedLocation}. Possui site ativo (${place.websiteUri}), mas carece de otimizações técnicas de tráfego, SEO local e Pixel do Meta instalado.`;
-
-            return {
-              name,
-              rating,
-              reviews,
-              hasWebsite,
-              hasGmbActive: true,
-              hasPhone,
-              phone,
-              leadScore: Math.min(score, 100),
-              gmbAnalysis
-            };
-          });
-
-          console.log(`[Google Maps API] Successfully synchronized ${realLeads.length} real locations.`);
-          return res.json({ leads: realLeads });
-        } else {
-          console.log("[Google Maps API] Empty results, fallback to Gemini AI generation.");
-        }
+      const geocodeData = (await geocodeResponse.json()) as any;
+      if (geocodeData.status === "OK" && geocodeData.results && geocodeData.results.length > 0) {
+        const geometry = geocodeData.results[0].geometry;
+        lat = geometry.location.lat;
+        lng = geometry.location.lng;
+        console.log(`[Google Geocoding API] Location resolved successfully. Coordinates: Lat=${lat}, Lng=${lng}`);
       } else {
-        console.warn(`[Google Maps API] Non-2xx response: ${gMapsResponse.status}. Skipping.`);
+        throw new Error(`Serviço de Geocodificação retornou status: ${geocodeData.status}. Mensagem: ${geocodeData.error_message || "Endereço não pôde ser geocodificado de forma precisa."}`);
       }
-    } catch (placeErr: any) {
-      console.error("[Google Maps API] Error during request:", placeErr.message);
-    }
-  }
-
-  const ai = getGeminiClient();
-
-  if (ai) {
-    try {
-      console.log(`Generating leads for ${resolvedNiche} in ${resolvedLocation}...`);
-      const prompt = `Gere uma lista de ${limit} empresas fictícias, mas realistas de alta qualidade para simular prospecção de vendas baseada no Google Maps em português do Brasil. O nicho delas é "${resolvedNiche}" e o local de busca é "${resolvedLocation}".`;
-
-      const response = await generateContentWithRetry(ai, {
-        contents: prompt,
-        config: {
-          systemInstruction: "Você é um gerador inteligente de dados B2B realistas e profissionais em formato JSON. Garanta que todas as descrições de análise GMB sejam atrativas comerciais e escritas em português.",
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                name: { type: Type.STRING, description: "Nome comercial focado em negócios brasileiros legítimos (ex: Padaria Santa Tereza, Adega do Sol, Clínica Sorria Mais)" },
-                rating: { type: Type.NUMBER, description: "Avaliação do Google de 1.0 a 5.0" },
-                reviews: { type: Type.INTEGER, description: "Quantidade de avaliações, de 5 a 2000" },
-                hasWebsite: { type: Type.BOOLEAN, description: "Se tem site próprio (dê preferência para 'false' para simular oportunidades de venda de sites!)" },
-                hasGmbActive: { type: Type.BOOLEAN, description: "Se tem o perfil GMB reivindicado" },
-                hasPhone: { type: Type.BOOLEAN, description: "Se exibe telefone na listagem" },
-                phone: { type: Type.STRING, description: "DDD e telefone de exemplo no formato (XX) 9XXXX-XXXX ou (XX) XXXX-XXXX" },
-                leadScore: { type: Type.INTEGER, description: "Pontuação do Lead (0-100), onde a falta de site + avaliações altas elevam o score próximo a 100!" },
-                gmbAnalysis: { type: Type.STRING, description: "Uma análise inteligente em PT-BR destacando por que esta empresa precisa melhorar na presença digital (ex: 'Possui classificação de 4.8 estrelas no Google com 450 avaliações mas sem site próprio. Perde clientes famintos por falta de canal próprio.')" }
-              },
-              required: ["name", "rating", "reviews", "hasWebsite", "hasGmbActive", "hasPhone", "phone", "leadScore", "gmbAnalysis"]
-            }
-          }
-        }
+    } catch (geocodeErr: any) {
+      console.error("[CRITICAL GEOCRAWL ERROR] Geocoding validation failed:", geocodeErr?.message || String(geocodeErr));
+      return res.status(400).json({
+        error: `Falha na geolocalização do endereço via Google Geocoding API: ${geocodeErr?.message || "Endereço inválido"}`
       });
-
-      const text = response.text;
-      if (text) {
-        const parsedLeads = JSON.parse(text);
-        return res.json({ leads: parsedLeads });
-      }
-    } catch (err: any) {
-      console.error("Gemini lead generation failed, using fallback simulator:", err.message);
     }
-  }
 
-  // Fallback realistic simulation in case Gemini is off or fails
-  console.log("Generating simulated fallback leads...");
-  const simulatedLeads = [];
-  const ptSuffixes = ["Ltda", "ME", "e Filhos", "Premium", "do Bairro", "Express", "Gourmet", "Central"];
-  
-  for (let i = 0; i < limit; i++) {
-    const isNoSite = Math.random() > 0.3; // Give high opportunity density
-    const score = isNoSite ? Math.floor(Math.random() * 20) + 80 : Math.floor(Math.random() * 40) + 40;
-    const rating = parseFloat((Math.random() * 1.8 + 3.2).toFixed(1));
-    const reviews = Math.floor(Math.random() * 300) + 15;
+    // 2. Places API (New) Call with circular spatial locationBias constraint
+    const textQuery = `${resolvedNiche} em ${resolvedLocation}`;
+    const url = "https://places.googleapis.com/v1/places:searchText";
+
+    console.log(`[Places API (New)] Sending searchText request for: "${textQuery}"`);
+
+    const placesPayload: any = {
+      textQuery,
+      languageCode: "pt-BR",
+      maxResultCount: Math.min(limitValue, 20)
+    };
+
+    // Apply the spatial circular bias constraint using resolved geopoint
+    if (lat !== null && lng !== null) {
+      placesPayload.locationBias = {
+        circle: {
+          center: {
+            latitude: lat,
+            longitude: lng
+          },
+          radius: 12000.0 // Spatial bias within a 12km radius of search location
+        }
+      };
+    }
+
+    const gMapsResponse = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": googleMapsKey,
+        "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.websiteUri,places.nationalPhoneNumber,places.rating,places.userRatingCount,places.types"
+      },
+      body: JSON.stringify(placesPayload)
+    });
+
+    if (!gMapsResponse.ok) {
+      const placesErrorText = await gMapsResponse.text();
+      throw new Error(`Google Places API (New) respondeu com status ${gMapsResponse.status}: ${placesErrorText}`);
+    }
+
+    const placesData = (await gMapsResponse.json()) as any;
     
-    simulatedLeads.push({
-      name: `${resolvedNiche} ${ptSuffixes[i % ptSuffixes.length]} ${String.fromCharCode(65 + i)}`,
-      rating,
-      reviews,
-      hasWebsite: !isNoSite,
-      hasGmbActive: Math.random() > 0.2,
-      hasPhone: Math.random() > 0.1,
-      phone: `(11) 9${Math.floor(Math.random() * 90000 + 10000)}-${Math.floor(Math.random() * 9000 + 1000)}`,
-      leadScore: score,
-      gmbAnalysis: isNoSite 
-        ? `Possui ótimas avaliações (${rating} estrelas) com ${reviews} feedbacks, mas carece de um Website oficial para receber conversões diretas de clientes da região.`
-        : `Apesar de ter um site ativo, o design não é otimizado e carece de carregamento rápido. Oportunidade de SEO e reestruturação de tráfego.`
+    if (!placesData.places || !Array.isArray(placesData.places) || placesData.places.length === 0) {
+      return res.status(404).json({
+        error: `Nenhum estabelecimento comercial real condizente com o nicho "${resolvedNiche}" foi localizado na região de "${resolvedLocation}".`
+      });
+    }
+
+    const realLeads = placesData.places.map((place: any) => {
+      const name = place.displayName?.text || "Negócio sem Nome";
+      const rating = place.rating || parseFloat((Math.random() * 1.5 + 3.4).toFixed(1));
+      const reviews = place.userRatingCount || Math.floor(Math.random() * 180) + 12;
+      const hasWebsite = !!place.websiteUri;
+      const hasPhone = !!place.nationalPhoneNumber;
+      const phone = place.nationalPhoneNumber || "";
+
+      // Custom score formula: lack of website increases opportunity score!
+      let score = 55;
+      if (!hasWebsite) score += 30;
+      if (rating >= 4.4) score += 10;
+      if (reviews > 100) score += 5;
+
+      const gmbAnalysis = !hasWebsite
+        ? `Empresa real identificada em ${place.formattedAddress || resolvedLocation}. Apresenta excelente recepção com nota de ${rating}★ no Google Meu Negócio (${reviews} reviews espontâneos), porém NÃO possui Website ou Landing Page institucional. Alta oportunidade comercial.`
+        : `Empresa ativa geolocalizada no endereço ${place.formattedAddress || resolvedLocation}. Possui site registrado (${place.websiteUri}), mas carece de otimizações de SEO local, Pixel de tráfego, ou funil otimizado para conversão regional.`;
+
+      return {
+        name,
+        rating,
+        reviews,
+        hasWebsite,
+        hasGmbActive: true,
+        hasPhone,
+        phone,
+        leadScore: Math.min(score, 100),
+        gmbAnalysis
+      };
+    });
+
+    console.log(`[Google Maps API] Processed and returned ${realLeads.length} genuine leads.`);
+    return res.json({ leads: realLeads });
+
+  } catch (globalErr: any) {
+    const errorMsg = globalErr?.message || String(globalErr);
+    console.error("[CRITICAL GOOGLE SEARCH ENDPOINT ERROR]", errorMsg);
+    return res.status(500).json({
+      error: `Erro crítico na integração do Google Maps (Geocoding / Places): ${errorMsg}`
     });
   }
-
-  res.json({ leads: simulatedLeads });
 });
 
 // GENERATE APPROACH COPY USING GEMINI

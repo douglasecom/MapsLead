@@ -34,7 +34,12 @@ import {
   Code,
   BookOpen,
   X,
-  Lock
+  Lock,
+  Calendar,
+  Video,
+  Bell,
+  Clock,
+  Link2
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -310,7 +315,7 @@ A oferta de serviços de otimização comercial, criação de sites e tráfego p
       keywordsMeta.setAttribute("name", "keywords");
       document.head.appendChild(keywordsMeta);
     }
-    keywordsMeta.setAttribute("content", "leads, google maps, prospecção de clientes, empresas sem site, leads b2b, crm, inteligência artificial, google maps leads, prospecção automática, marketing digital, tráfego pago, seo local, empresas anunciando, meta ads, gestão comercial");
+    keywordsMeta.setAttribute("content", "leads, google maps, prospecção de clientes, empresas sem site, leads b2b, crm, inteligência artificial, google maps leads, prospecção automática, marketing digital, tráfego pago, seo local, empresas anunciando, meta ads, gestão comercial, agenda comercial, agendamento online, crm com agenda, google meet integrado, calendly alternativo, agenda para vendas, software de prospecção, crm para agências, crm para gestores de tráfego, crm para vendedores");
   }, []);
 
   const handleStartSimulation = (e: React.FormEvent) => {
@@ -1318,6 +1323,162 @@ A oferta de serviços de otimização comercial, criação de sites e tráfego p
         </div>
       </section>
 
+      {/* SEÇÃO "NUNCA MAIS ESQUEÇA UM LEAD" */}
+      <section id="agenda-e-reunioes" className="py-20 max-w-7xl mx-auto px-4 text-center space-y-14">
+        <div className="space-y-3 max-w-2xl mx-auto">
+          <span className="bg-[#8B2DFF]/15 text-[#C026FF] border border-[#8B2DFF]/25 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest font-mono">
+            ORGANIZAÇÃO COMERCIAL COMPLETA
+          </span>
+          <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+            Nunca Mais Esqueça Um Lead
+          </h2>
+          <p className="text-[#A1A1AA] text-xs sm:text-sm">
+            Gerencie contatos, reuniões, follow-ups e oportunidades em um único lugar.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 text-left">
+          {/* Card 1: Agenda Comercial */}
+          <div className="bg-[#13131A] p-6 rounded-2xl border border-slate-900 hover:border-slate-850 transition-all space-y-4">
+            <div className="w-10 h-10 rounded-xl bg-[#8B2DFF]/10 border border-[#8B2DFF]/30 flex items-center justify-center">
+              <Calendar className="w-5 h-5 text-[#8B2DFF]" />
+            </div>
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <span className="text-xl">📅</span> Agenda Comercial
+            </h3>
+            <p className="text-xs text-slate-400 font-medium leading-relaxed">
+              Organize reuniões, ligações e compromissos com seus prospects.
+            </p>
+          </div>
+
+          {/* Card 2: Reuniões Integradas */}
+          <div className="bg-[#13131A] p-6 rounded-2xl border border-slate-900 hover:border-slate-850 transition-all space-y-4">
+            <div className="w-10 h-10 rounded-xl bg-[#C026FF]/10 border border-[#C026FF]/30 flex items-center justify-center">
+              <Video className="w-5 h-5 text-[#C026FF]" />
+            </div>
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <span className="text-xl">📹</span> Reuniões Integradas
+            </h3>
+            <p className="text-xs text-slate-400 font-medium leading-relaxed">
+              Crie e participe de reuniões por vídeo diretamente na plataforma.
+            </p>
+          </div>
+
+          {/* Card 3: Lembretes Inteligentes */}
+          <div className="bg-[#13131A] p-6 rounded-2xl border border-slate-900 hover:border-slate-850 transition-all space-y-4">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center">
+              <Bell className="w-5 h-5 text-amber-500" />
+            </div>
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <span className="text-xl">🔔</span> Lembretes Inteligentes
+            </h3>
+            <p className="text-xs text-slate-400 font-medium leading-relaxed">
+              Receba alertas automáticos para follow-ups e negociações.
+            </p>
+          </div>
+
+          {/* Card 4: IA Comercial */}
+          <div className="bg-[#13131A] p-6 rounded-2xl border border-slate-900 hover:border-slate-850 transition-all space-y-4">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">
+              <Zap className="w-5 h-5 text-emerald-400" />
+            </div>
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <span className="text-xl">🤖</span> IA Comercial
+            </h3>
+            <p className="text-xs text-slate-400 font-medium leading-relaxed">
+              A IA identifica oportunidades e sugere os próximos passos.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* SEÇÃO "SEU CALENDLY INTEGRADO AO CRM" */}
+      <section id="calendly-integrado" className="py-20 bg-[#13131A]/35 border-y border-slate-950 px-4">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+            
+            {/* Left Block */}
+            <div className="lg:col-span-6 space-y-6 text-left">
+              <span className="text-[10px] font-black text-[#C026FF] bg-[#8B2DFF]/15 px-3 py-1 rounded font-mono uppercase tracking-widest inline-block">Agendamento Simplificado</span>
+              <h2 className="text-3xl sm:text-4xl font-extrabold text-white leading-tight">Seu Calendly Integrado ao CRM</h2>
+              <p className="text-[#A1A1AA] text-xs sm:text-sm leading-relaxed font-semibold">
+                Compartilhe seu link personalizado de agendamento e permita que clientes marquem reuniões automaticamente.
+              </p>
+
+              <div className="bg-[#0A0A0F] p-4 rounded-xl border border-slate-850 flex items-center justify-between font-sans">
+                <div className="flex items-center gap-2 font-mono text-xs sm:text-sm">
+                  <Link2 className="w-4 h-4 text-[#8B2DFF]" />
+                  <span className="text-slate-400">prospect.adshive.online/</span>
+                  <span className="text-white font-extrabold">seunome</span>
+                </div>
+                <span className="text-[9px] bg-indigo-500/10 text-indigo-400 font-bold px-2 py-0.5 rounded uppercase tracking-wider font-mono">Exemplo</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-2 text-xs text-slate-300 font-bold">
+                <div className="flex items-center gap-2 bg-[#13131A] p-2.5 rounded-lg border border-slate-900"><Check className="text-[#8B2DFF] w-4 h-4 shrink-0" /> Escolha automática de horários</div>
+                <div className="flex items-center gap-2 bg-[#13131A] p-2.5 rounded-lg border border-slate-900"><Check className="text-[#8B2DFF] w-4 h-4 shrink-0" /> Criação automática de reunião</div>
+                <div className="flex items-center gap-2 bg-[#13131A] p-2.5 rounded-lg border border-slate-900"><Check className="text-[#8B2DFF] w-4 h-4 shrink-0" /> Integração com CRM</div>
+                <div className="flex items-center gap-2 bg-[#13131A] p-2.5 rounded-lg border border-slate-900"><Check className="text-[#8B2DFF] w-4 h-4 shrink-0" /> Notificações automáticas</div>
+                <div className="flex items-center gap-2 bg-[#13131A] p-2.5 rounded-lg border border-slate-900 col-span-1 sm:col-span-2"><Check className="text-[#8B2DFF] w-4 h-4 shrink-0" /> Histórico completo</div>
+              </div>
+            </div>
+
+            {/* Right Block */}
+            <div className="lg:col-span-6 relative">
+              <div className="absolute -inset-1 rounded-3xl bg-gradient-to-r from-[#8B2DFF] to-[#C026FF] opacity-15 blur-2xl pointer-events-none"></div>
+              <div className="relative bg-[#13131A] p-6 rounded-3xl border border-slate-850 space-y-4 text-left font-sans">
+                
+                <div className="flex justify-between items-center bg-[#0A0A0F] p-3 rounded-xl border border-slate-900">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-full bg-[#8B2DFF] flex items-center justify-center font-bold text-xs text-white">D</div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white">Douglas Silva</h4>
+                      <p className="text-[10px] text-slate-500 font-semibold">Reunião de Alinhamento • 30 min</p>
+                    </div>
+                  </div>
+                  <span className="bg-[#8B2DFF]/20 text-[#C026FF] font-bold text-[9px] px-2 py-0.5 rounded-full font-mono">Ativo</span>
+                </div>
+
+                <div className="space-y-3 font-sans">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] text-[#A1A1AA] font-bold uppercase tracking-wider font-mono">📅 Selecione um Dia</span>
+                    <span className="text-[10px] font-bold text-white">Junho 2026</span>
+                  </div>
+                  <div className="grid grid-cols-7 gap-1.5 text-center text-[10px] font-bold">
+                    <span className="py-1 text-slate-500">D</span>
+                    <span className="py-1 text-slate-500">S</span>
+                    <span className="py-1 text-slate-500">T</span>
+                    <span className="py-1 text-slate-500">Q</span>
+                    <span className="py-1 text-slate-500">Q</span>
+                    <span className="py-1 text-slate-500">S</span>
+                    <span className="py-1 text-slate-500">S</span>
+
+                    <span className="text-slate-700 py-1.5">31</span>
+                    <span className="text-white bg-slate-900/45 rounded-lg hover:bg-slate-800 py-1.5 cursor-pointer">1</span>
+                    <span className="text-white bg-slate-900/45 rounded-lg hover:bg-slate-800 py-1.5 cursor-pointer">2</span>
+                    <span className="text-white bg-slate-900/45 rounded-lg hover:bg-slate-800 py-1.5 cursor-pointer">3</span>
+                    <span className="text-white bg-slate-900/45 rounded-lg hover:bg-slate-800 py-1.5 cursor-pointer">4</span>
+                    <span className="text-white bg-[#8B2DFF] rounded-lg py-1.5 shadow-md shadow-[#8B2DFF]/30 cursor-pointer text-center">5</span>
+                    <span className="text-white bg-slate-900/45 rounded-lg hover:bg-slate-800 py-1.5 cursor-pointer">6</span>
+                  </div>
+
+                  <div className="space-y-1.5 pt-1">
+                    <span className="text-[10px] text-[#A1A1AA] font-bold uppercase tracking-wider font-mono">⏰ Horários Disponíveis</span>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button type="button" className="bg-slate-900 hover:bg-slate-850 border border-slate-800 text-white font-bold text-[10.5px] py-1.5 rounded-lg text-center cursor-pointer">09:00</button>
+                      <button type="button" className="bg-slate-900 hover:bg-slate-850 border border-slate-800 text-white font-bold text-[10.5px] py-1.5 rounded-lg text-center cursor-pointer">10:30</button>
+                      <button type="button" className="bg-gradient-to-r from-[#8B2DFF] to-[#C026FF] text-white font-bold text-[10.5px] py-1.5 rounded-lg text-center cursor-pointer shadow-md shadow-[#8B2DFF]/25">14:00</button>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
       {/* PLANOS SAAS RECORRENTE COMPARATIVOS */}
       <section id="comparativo-planos" className="py-20 max-w-7xl mx-auto px-4 text-center space-y-14">
         
@@ -1349,11 +1510,11 @@ A oferta de serviços de otimização comercial, criação de sites e tráfego p
                 <span className="text-4xl font-black text-white tracking-tight">0</span>
               </div>
 
-              <ul className="text-xs text-slate-300 space-y-2.5 font-semibold font-sans border-t border-slate-900 pt-4">
+              <ul className="text-xs text-slate-350 space-y-2.5 font-semibold font-sans border-t border-slate-905 pt-4">
                 <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> 10 Leads por mês</li>
-                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> CRM Básico</li>
-                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> Pesquisa Local</li>
-                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> Suporte Comitê</li>
+                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> Pesquisa básica</li>
+                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> CRM básico</li>
+                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> 20 mensagens IA/mês</li>
               </ul>
             </div>
 
@@ -1379,12 +1540,12 @@ A oferta de serviços de otimização comercial, criação de sites e tráfego p
                 <span className="text-slate-400 text-xs font-bold">/mês</span>
               </div>
 
-              <ul className="text-xs text-slate-300 space-y-2.5 font-semibold font-sans border-t border-slate-900 pt-4">
-                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> 100 Leads</li>
-                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> 100 Pesquisas</li>
-                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> IA Comercial</li>
-                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> CRM Completo</li>
-                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> 1 Usuário</li>
+              <ul className="text-xs text-slate-300 space-y-2.5 font-semibold font-sans border-t border-slate-905 pt-4">
+                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> 100 Leads por mês</li>
+                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> CRM completo</li>
+                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> Agenda Comercial</li>
+                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> Lembretes automáticos</li>
+                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> 200 mensagens IA/mês</li>
               </ul>
             </div>
 
@@ -1398,14 +1559,17 @@ A oferta de serviços de otimização comercial, criação de sites e tráfego p
 
           {/* Plan 3: Pro (Highlighted Glow Card) */}
           <div className="bg-[#13131A] p-5 rounded-2xl border-2 border-[#8B2DFF] space-y-5 flex flex-col justify-between relative shadow-2xl shadow-[#8B2DFF]/15">
-            <div className="absolute top-[-10px] left-1/2 -translate-x-1/2 bg-gradient-to-r from-[#8B2DFF] to-[#C026FF] text-white text-[8px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full whitespace-nowrap shadow">
-              🔥 MAIS POPULAR
+            <div className="absolute top-[-10px] left-1/2 -translate-x-1/2 bg-gradient-to-r from-[#8B2DFF] to-[#C026FF] text-white text-[8px] sm:text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-full whitespace-nowrap shadow flex items-center gap-1">
+              <span>⭐</span> MAIS POPULAR
             </div>
             
             <div className="space-y-4">
               <div>
                 <span className="text-[9px] uppercase font-bold text-[#C026FF] tracking-widest block font-mono font-bold">Crescimento</span>
                 <h4 className="text-base font-extrabold text-white mt-1 uppercase">Plano Pro</h4>
+                <p className="text-[10px] text-slate-400 font-semibold leading-tight mt-1.5">
+                  Ideal para agências, gestores de tráfego, web designers e consultores.
+                </p>
               </div>
 
               <div className="flex items-baseline gap-1">
@@ -1415,12 +1579,13 @@ A oferta de serviços de otimização comercial, criação de sites e tráfego p
               </div>
 
               <ul className="text-xs text-slate-200 space-y-2.5 font-bold font-sans border-t border-[#8B2DFF]/20 pt-4">
-                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> 500 Leads</li>
-                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> 500 Pesquisas</li>
-                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> IA Comercial</li>
-                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> Meta Ads Audit</li>
-                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> Análise SEO</li>
-                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> 3 Usuários</li>
+                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> 500 Leads por mês</li>
+                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> Agenda Comercial</li>
+                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> Google Meet integrado</li>
+                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> Calendário avançado</li>
+                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> Follow-up inteligente</li>
+                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> CRM avançado</li>
+                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> 1.000 mensagens IA/mês</li>
               </ul>
             </div>
 
@@ -1447,12 +1612,12 @@ A oferta de serviços de otimização comercial, criação de sites e tráfego p
               </div>
 
               <ul className="text-xs text-slate-300 space-y-2.5 font-semibold font-sans border-t border-slate-900 pt-4">
-                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> 2.000 Leads</li>
-                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> Pesquisas Ilimitadas</li>
-                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> IA Avançada</li>
-                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> CRM Avançado</li>
-                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> Integreções</li>
-                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> 10 Usuários</li>
+                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> 2.000 Leads por mês</li>
+                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> Calendly interno</li>
+                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> Equipe multiusuário</li>
+                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> Automações avançadas</li>
+                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> CRM completo</li>
+                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> 5.000 mensagens IA/mês</li>
               </ul>
             </div>
 
@@ -1477,18 +1642,18 @@ A oferta de serviços de otimização comercial, criação de sites e tráfego p
               </div>
 
               <ul className="text-xs text-slate-300 space-y-2.5 font-semibold font-sans border-t border-slate-900 pt-4">
-                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> Leads Ilimitados</li>
-                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> Usuários Ilimitados</li>
-                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> Suporte Prioridade</li>
-                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> White Label</li>
-                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> API Acesso</li>
-                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> Onboarding</li>
+                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> Usuários ilimitados</li>
+                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> Leads personalizados</li>
+                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> Calendly interno</li>
+                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> API exclusiva</li>
+                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> IA personalizada</li>
+                <li className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-[#8B2DFF] shrink-0" /> Suporte prioritário</li>
               </ul>
             </div>
 
             <button
               onClick={() => onNavigateToAuth('register')}
-              className="w-full bg-[#0A0A0F] border border-slate-800 text-indigo-400 text-xs font-bold py-2.5 rounded-xl hover:bg-slate-900 transition-all cursor-pointer font-sans"
+              className="w-full bg-[#0A0A0F] border border-slate-800 text-[#8B2DFF] text-xs font-bold py-2.5 rounded-xl hover:bg-slate-900 transition-all cursor-pointer font-sans"
             >
               Falar com Especialista
             </button>
@@ -1631,16 +1796,16 @@ A oferta de serviços de otimização comercial, criação de sites e tráfego p
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-[#8B2DFF]/10 rounded-full blur-[100px] pointer-events-none"></div>
           
           <div className="space-y-2 relative z-10">
-            <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight uppercase">Comece Gratuitamente Agora</h2>
-            <p className="text-[#A1A1AA] text-xs sm:text-sm max-w-xl mx-auto leading-relaxed">
-              Receba 10 Leads Grátis e descubra dezenas de empresas prontas para comprar seus serviços hoje mesmo.
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-tight uppercase">Prospecte, Agende e Feche Clientes Sem Sair da Plataforma</h2>
+            <p className="text-[#A1A1AA] text-xs sm:text-sm max-w-2xl mx-auto leading-relaxed">
+              Encontre empresas, organize seu funil, agende reuniões e feche mais contratos usando inteligência artificial.
             </p>
           </div>
 
           <div className="relative z-10 flex flex-col items-center gap-3">
             <button
               onClick={() => onNavigateToAuth('register')}
-              className="w-full sm:w-auto bg-gradient-to-r from-[#8B2DFF] to-[#C026FF] text-white font-black text-sm px-10 py-4.5 rounded-xl shadow-xl shadow-[#8B2DFF]/35 hover:scale-104 active:scale-97 cursor-pointer transition-all uppercase tracking-wider border-none text-center"
+              className="w-full sm:w-auto bg-gradient-to-r from-[#8B2DFF] to-[#C026FF] text-white font-black text-sm px-10 py-4.5 rounded-xl shadow-xl shadow-[#8B2DFF]/35 hover:scale-104 active:scale-97 cursor-pointer transition-all uppercase tracking-wider border-none text-center font-sans font-bold"
             >
               🚀 Ganhar 10 Leads Grátis
             </button>

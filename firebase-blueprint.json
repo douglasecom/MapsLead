@@ -168,9 +168,37 @@
         "lead_delete_factor": { "type": "number" }
       },
       "required": []
+    },
+    "Meeting": {
+      "title": "Meeting",
+      "description": "Agenda meetings associated with B2B leads.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "company": { "type": "string" },
+        "responsible": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "type": { "type": "string" },
+        "observations": { "type": "string" },
+        "status": { "type": "string" },
+        "leadId": { "type": "string" },
+        "meetLink": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "whatsapp": { "type": "string" },
+        "city": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "title", "company", "responsible", "date", "time", "type", "status"]
     }
   },
   "firestore": {
+    "/meetings/{meetingId}": {
+      "schema": "Meeting",
+      "description": "Meetings and appointments scheduled inside AdsHive CRM."
+    },
     "/users/{userId}": {
       "schema": "User",
       "description": "User profile with tenancy details."

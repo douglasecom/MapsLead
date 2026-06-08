@@ -171,5 +171,23 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
+
+    // 12. meetings collection (Agenda appointments)
+    function isValidMeeting(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.title is string && data.title.size() <= 300
+        && data.company is string && data.company.size() <= 300
+        && data.responsible is string && data.responsible.size() <= 200
+        && data.date is string && data.date.size() <= 50
+        && data.time is string && data.time.size() <= 50
+        && data.type is string && data.type.size() <= 50
+        && data.status is string && data.status.size() <= 50;
+    }
+
+    match /meetings/{meetingId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(meetingId) && isValidMeeting(incoming());
+      allow delete: if isSignedIn();
+    }
   }
 }

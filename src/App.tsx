@@ -40,7 +40,8 @@ import {
   Bookmark,
   Share2,
   FileText,
-  ShieldAlert
+  ShieldAlert,
+  Calendar
 } from "lucide-react";
 import { initialLeads } from "./initialData";
 import { Lead, GeneratedMessage, UserSession } from "./types";
@@ -50,6 +51,8 @@ import { LandingPage } from "./components/LandingPage";
 import { KanbanCRM } from "./components/KanbanCRM";
 import { RadarDigital } from "./components/RadarDigital";
 import { ComercialDash } from "./components/ComercialDash";
+import { AgendaComercial } from "./components/AgendaComercial";
+import { PublicBooking } from "./components/PublicBooking";
 import { CopilotoIA } from "./components/CopilotoIA";
 import { DocumentGenerator } from "./components/DocumentGenerator";
 import { LojaCreditos } from "./components/LojaCreditos";
@@ -117,7 +120,34 @@ export default function App() {
   };
 
   // Navigation & View Mode
-  const [activeTab, setActiveTab] = useState<"inicio" | "pesquisa" | "leads" | "oportunidades" | "ai_gerador" | "admin" | "crm" | "radar" | "comercial" | "loja_creditos" | "financeiro" | "dashboard-owner">("inicio");
+  const [activeTab, setActiveTab] = useState<"inicio" | "pesquisa" | "leads" | "oportunidades" | "ai_gerador" | "admin" | "crm" | "radar" | "comercial" | "loja_creditos" | "financeiro" | "dashboard-owner" | "agenda">("inicio");
+
+  // Public Booking State for Calendly Integrado
+  const [isPublicCalendly, setIsPublicCalendly] = useState(false);
+  const [calendlyUserSlug, setCalendlyUserSlug] = useState<string>("");
+
+  useEffect(() => {
+    const handleHashAndPath = () => {
+      const hash = window.location.hash;
+      const path = window.location.pathname;
+      if (hash.startsWith("#/agendar/") || path.startsWith("/agendar/")) {
+        const slug = hash.startsWith("#/agendar/") 
+          ? hash.substring(10) 
+          : path.substring(9);
+        setIsPublicCalendly(true);
+        setCalendlyUserSlug(slug);
+      } else if (hash.startsWith("#") && hash.length > 2) {
+        const slug = hash.substring(1);
+        if (!["inicio", "leads", "pesquisa", "agenda", "crm", "comercial", "radar", "admin", "oportunidades", "financeiro", "ai_gerador"].includes(slug)) {
+          setIsPublicCalendly(true);
+          setCalendlyUserSlug(slug);
+        }
+      }
+    };
+    handleHashAndPath();
+    window.addEventListener("hashchange", handleHashAndPath);
+    return () => window.removeEventListener("hashchange", handleHashAndPath);
+  }, []);
 
   // Routing/Viewing state for unauthenticated users
   const [unauthView, setUnauthView] = useState<"landing" | "login" | "register">("landing");
@@ -681,6 +711,11 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
       });
       
       const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || `HTTP ${response.status} - Erro na resposta do servidor`);
+      }
+
       if (data.leads && Array.isArray(data.leads)) {
         // Map elements with IDs and state
         const formattedLeads: Lead[] = data.leads.map((l: any, i: number) => ({
@@ -704,46 +739,12 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
         setSearchResults(formattedLeads);
         triggerNotification(`Encontramos ${formattedLeads.length} novos leads do Google Maps!`, "success");
       } else {
-        throw new Error("Formato inválido recebido do servidor.");
+        throw new Error("Formato inválido recebido do servidor: campo 'leads' ausente ou inválido.");
       }
     } catch (err: any) {
-      console.error(err);
-      triggerNotification("Falha na busca em tempo real. Usando dados offline simulados do cache local.", "warning");
-      
-      // Simulate high-fidelity offline fallback leads
-      const ptSuffixes = ["Ltda", "ME", "e Filhos", "Premium", "Gourmet", "Central", "Express", "Artisanal"];
-      const fallbackList: Lead[] = [];
-      const resolvedNiche = searchNiche || "Padaria";
-      const resolvedLocation = searchLocation || "São Paulo, SP";
-      
-      const count = 8; // Generate 8 gorgeous opportunities
-      for (let i = 0; i < count; i++) {
-        const isNoSite = i % 3 === 0 || i % 3 === 1; // 66% opportunities density without site
-        const rating = parseFloat((Math.random() * 1.5 + 3.4).toFixed(1));
-        const reviews = Math.floor(Math.random() * 210) + 12;
-        const score = isNoSite ? Math.floor(Math.random() * 15) + 84 : Math.floor(Math.random() * 30) + 45;
-        
-        fallbackList.push({
-          id: `fallback_search_lead_${Date.now()}_${i}`,
-          name: `${resolvedNiche} ${ptSuffixes[i % ptSuffixes.length]} ${String.fromCharCode(65 + i)}`,
-          niche: resolvedNiche,
-          location: resolvedLocation,
-          rating,
-          reviews,
-          hasWebsite: !isNoSite,
-          hasGmbActive: Math.random() > 0.15,
-          hasPhone: Math.random() > 0.1,
-          phone: `(11) 9${Math.floor(Math.random() * 90000 + 10000)}-${Math.floor(Math.random() * 9000 + 1000)}`,
-          leadScore: score,
-          status: 'novo',
-          captured: false,
-          gmbAnalysis: isNoSite 
-            ? `Possui classificação excelente local (${rating}★) com ${reviews} avaliações, mas NÃO possui nenhum site oficial registrado no Google Meu Negócio. Enorme potencial para serviço de landpage rápida.`
-            : `Ficha ativa no Google Meu Negócio. Site institucional OK, porém sem tag de rastreamento de anúncios (Meta Pixel/Google Tag) instalada ou configurada.`,
-          avatarColor: getAvatarColorForNiche(resolvedNiche)
-        });
-      }
-      setSearchResults(fallbackList);
+      console.error("[CRITICAL GOOGLE MAPS API ERROR DEBUG]", err);
+      triggerNotification(`Erro real de integração: ${err?.message || "Conexão mal sucedida"}`, "warning");
+      setSearchResults([]);
     } finally {
       setIsSearching(false);
     }
@@ -914,6 +915,15 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
     if (leadsFilter === "nicho" && nicheSearchQuery !== "" && !l.niche.toLowerCase().includes(nicheSearchQuery.toLowerCase())) return false;
     return true;
   });
+
+  if (isPublicCalendly) {
+    return (
+      <PublicBooking 
+        slug={calendlyUserSlug} 
+        triggerNotification={triggerNotification} 
+      />
+    );
+  }
 
   if (!session) {
     return (
@@ -1189,6 +1199,15 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
                 <span>Kanban CRM</span>
                 <span className="bg-[#8B2EFF]/20 text-[#8B2EFF] text-[9px] px-1.5 py-0.2 rounded font-black uppercase">Novo</span>
               </span>
+            </button>
+
+            <button 
+              id="sidebar-tab-agenda"
+              onClick={() => setActiveTab("agenda")} 
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-bold text-sm transition-all text-left ${getSidebarBtnClass("agenda")}`}
+            >
+              <Calendar className="w-5 h-5 shrink-0" />
+              <span>Agenda</span>
             </button>
 
             <button 
@@ -3309,6 +3328,20 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
             </div>
           )}
 
+          {/* TAB 10: AGENDA COMERCIAL */}
+          {activeTab === "agenda" && (
+            <div id="tab-agenda-view" className="w-full overflow-hidden space-y-6 animate-in fade-in duration-300">
+              <AgendaComercial 
+                leads={leads} 
+                setLeads={setLeads} 
+                triggerNotification={triggerNotification} 
+                userId={session?.id}
+                userRole={session?.role}
+                session={session}
+              />
+            </div>
+          )}
+
           {/* TAB: FINANCEIRO DO CLIENTE */}
           {(activeTab === "financeiro" || activeTab === "loja_creditos") && (
             <Financeiro 
@@ -3324,8 +3357,8 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
 
       {/* Buy AI Package Modal Overlay */}
       {showBuyAiPackModal && (
-        <div id="modal-buy-ai-pack" className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[120] flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-[#111116] rounded-3xl w-full max-w-lg border border-[#2B2B3A] shadow-2xl overflow-hidden relative p-8 text-center space-y-6">
+        <div id="modal-buy-ai-pack" className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[120] flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
+          <div className="bg-[#111116] rounded-3xl w-full max-w-lg border border-[#2B2B3A] shadow-2xl overflow-y-auto max-h-[92vh] relative p-6 sm:p-8 text-center space-y-5 my-auto">
             
             <button 
               onClick={() => setShowBuyAiPackModal(false)}

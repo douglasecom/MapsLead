@@ -12,7 +12,8 @@ async function testFirebase() {
     }
     const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf8"));
     const fbApp = initializeApp(firebaseConfig);
-    const db = getFirestore(fbApp, firebaseConfig.firestoreDatabaseId);
+    const dbId = firebaseConfig.firestoreDatabaseId || "ai-studio-07fa01e6-d6a1-4d4e-b05a-262a2373f3d7";
+    const db = getFirestore(fbApp, dbId);
     console.log("Firebase initialized");
 
     const testRef = doc(db, "aiUsage", "test_id_999");

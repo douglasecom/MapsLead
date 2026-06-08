@@ -167,3 +167,99 @@ body {
 .theme-dark .text-slate-400 {
   color: var(--text-suave);
 }
+
+#tab-agenda-view {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+/* Media query to force a clean vertical list view of the agenda on mobile & tablets */
+@media (max-width: 768px) {
+  #tab-agenda-view .grid-cols-7.text-center {
+    display: none !important;
+  }
+
+  #tab-agenda-view .grid-cols-7.gap-\[1px\],
+  #tab-agenda-view .grid-cols-7.divide-x {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)) !important;
+    gap: 12px !important;
+    background: transparent !important;
+    min-width: 100% !important;
+  }
+
+  #tab-agenda-view .grid-cols-7.gap-\[1px\] > div {
+    min-height: auto !important;
+    padding: 14px !important;
+    border-radius: 16px !important;
+    border: 1px solid var(--border-custom) !important;
+    background-color: var(--bg-card) !important;
+    width: 100% !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+    transition: transform 0.2s ease, border-color 0.2s ease !important;
+  }
+
+  #tab-agenda-view .grid-cols-7.gap-\[1px\] > div:hover {
+    border-color: #8B2EFF !important;
+    transform: translateY(-1px) !important;
+  }
+
+  #tab-agenda-view .grid-cols-7.gap-\[1px\] > div.ring-1 {
+    border: 2px solid #B026FF !important;
+    box-shadow: 0 0 16px rgba(176, 38, 255, 0.7), inset 0 0 8px rgba(176, 38, 255, 0.3) !important;
+  }
+
+  /* Only show days that actually have appointments or the active current day (Today) to avoid a huge list of empty days */
+  #tab-agenda-view .grid-cols-7.gap-\[1px\] > div:not(:has(.cursor-pointer)):not(.ring-1) {
+    display: none !important;
+  }
+
+  /* For Today empty list item, add a placeholder helper */
+  #tab-agenda-view .grid-cols-7.gap-\[1px\] > div.ring-1:not(:has(.cursor-pointer))::after {
+    content: "Nenhum compromisso agendado para hoje." !important;
+    display: block !important;
+    margin-top: 8px !important;
+    font-size: 11px !important;
+    color: var(--text-secondary) !important;
+    font-style: italic !important;
+  }
+
+  /* Ensure the row structure looks like a list card with dynamic date labels */
+  #tab-agenda-view .grid-cols-7.gap-\[1px\] > div .font-black {
+    font-size: 14px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+  }
+
+  /* Add word "Dia" dynamically before the day number on mobile */
+  #tab-agenda-view .grid-cols-7.gap-\[1px\] > div .font-black::before {
+    content: "Dia " !important;
+    font-weight: 500 !important;
+    opacity: 0.8 !important;
+    font-size: 12px !important;
+  }
+
+  /* Adapt horizontal week grid to vertical view */
+  #tab-agenda-view .grid-cols-7.min-h-\[400px\] {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)) !important;
+    gap: 12px !important;
+    min-height: auto !important;
+    background: transparent !important;
+    min-width: 100% !important;
+  }
+
+  #tab-agenda-view .grid-cols-7.min-h-\[400px\] > div {
+    border-radius: 16px !important;
+    background-color: var(--bg-card) !important;
+    border: 1px solid var(--border-custom) !important;
+    padding: 14px !important;
+  }
+
+  #tab-agenda-view .grid-cols-7.min-h-\[400px\] > div:not(:has(.cursor-pointer)) {
+    display: none !important;
+  }
+}
+

@@ -11,6 +11,25 @@ export interface CRMTask {
   category: 'ligacao' | 'email' | 'proposta' | 'reuniao';
 }
 
+export interface Meeting {
+  id: string;
+  title: string;
+  company: string;
+  responsible: string;
+  date: string;
+  time: string;
+  type: 'Presencial' | 'Telefone' | 'WhatsApp' | 'Google Meet';
+  observations?: string;
+  status: 'Agendado' | 'Confirmado' | 'Realizado' | 'Cancelado' | 'Reagendado';
+  leadId?: string;
+  meetLink?: string;
+  phone?: string;
+  email?: string;
+  whatsapp?: string;
+  city?: string;
+  createdAt: string;
+}
+
 export interface TimelineItem {
   id: string;
   type: 'capture' | 'status_change' | 'note' | 'task' | 'proposal' | 'contract';
@@ -54,6 +73,10 @@ export interface Lead {
   enrichment?: EnrichmentData;
   enrichedAt?: string;
   isEnriching?: boolean;
+  email?: string;
+  meetingTime?: string;
+  meetingTitle?: string;
+  meetLink?: string;
 }
 
 export interface GeneratedMessage {

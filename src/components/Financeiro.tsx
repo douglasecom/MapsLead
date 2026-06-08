@@ -1,11 +1,16 @@
 import React, { useState, useEffect } from "react";
 import { 
   CreditCard, DollarSign, Calendar, Clock, Coins, ShieldAlert,
-  ArrowUpRight, Download, CheckCircle, RefreshCw, AlertTriangle, FileText, Check
+  ArrowUpRight, Download, CheckCircle, RefreshCw, AlertTriangle, 
+  FileText, Check, Sparkles, User, Settings, ArrowRight, ShieldCheck, X, Activity, HelpCircle
 } from "lucide-react";
-import { doc, getDoc, setDoc, getDocs, collection, addDoc, query, where } from "firebase/firestore";
+import { doc, getDoc, setDoc, getDocs, collection } from "firebase/firestore";
 import { db } from "../firebase";
 import { UserSession, SaaSPayment, SaaSSubscription } from "../types";
+import { 
+  ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, 
+  Tooltip, BarChart, Bar, Legend
+} from "recharts";
 
 interface FinanceiroProps {
   session: UserSession | null;
@@ -19,44 +24,66 @@ export const Financeiro: React.FC<FinanceiroProps> = ({ session, triggerNotifica
   const [payments, setPayments] = useState<SaaSPayment[]>([]);
   const [subscription, setSubscription] = useState<SaaSSubscription | null>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
+  const [aiUsage, setAiUsage] = useState({
+    messagesUsed: 0,
+    messagesLimit: 20,
+    plan: "Gratuito",
+    lastResetDate: ""
+  });
 
-  // Buy credits flow state
-  const [selectedPack, setSelectedPack] = useState<string>("pack_100");
-  const [paymentMethod, setPaymentMethod] = useState<"pix" | "card" | "boleto">("pix");
+  // Purchase/Upgrade flow states
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [paymentSuccess, setPaymentSuccess] = useState<boolean>(false);
+  const [activePurchaseTab, setActivePurchaseTab] = useState<"leads" | "ia">("leads");
+  const [selectedPackId, setSelectedPackId] = useState<string>("pack_100");
+  const [paymentMethod, setPaymentMethod] = useState<"pix" | "card" | "boleto">("pix");
+  
+  // Checkout overlay states
+  const [activePendingPack, setActivePendingPack] = useState<any | null>(null);
+  const [pixCode, setPixCode] = useState<string | null>(null);
+  const [pixQr, setPixQr] = useState<string | null>(null);
+  const [secondsLeft, setSecondsLeft] = useState<number>(15);
 
-  // New states for interactive simulated Asaas gate
-  const [pendingCreditsPack, setPendingCreditsPack] = useState<any | null>(null);
-  const [pixCodeGenerated, setPixCodeGenerated] = useState<string | null>(null);
-  const [pixQrUrl, setPixQrUrl] = useState<string | null>(null);
-  const [secondsLeft, setSecondsLeft] = useState<number>(0);
-
-  // Credit Card fields
+  // Card details mock fields
   const [cardNumber, setCardNumber] = useState("");
   const [cardName, setCardName] = useState("");
   const [cardExpiry, setCardExpiry] = useState("");
   const [cardCvv, setCardCvv] = useState("");
 
+  // Modals for general actions
+  const [activeActionModal, setActiveActionModal] = useState<"cancel" | "update_card" | "change_plan" | null>(null);
+  const [newSelectedPlanName, setNewSelectedPlanName] = useState<string>("pro");
+
+  // Package definitions
   const creditPackages = [
-    { id: "pack_50", name: "Pacote 50 Leads", credits: 50, price: 10, description: "R$ 0,20 por lead adicional." },
-    { id: "pack_100", name: "Pacote 100 Leads", credits: 100, price: 20, description: "R$ 0,20 por lead adicional." },
-    { id: "pack_250", name: "Pacote 250 Leads", credits: 250, price: 50, description: "R$ 0,20 por lead adicional." },
-    { id: "pack_500", name: "Pacote 500 Leads", credits: 500, price: 100, description: "R$ 0,20 por lead adicional." },
-    { id: "pack_1000", name: "Pacote 1000 Leads", credits: 1000, price: 200, description: "R$ 0,20 por lead adicional." },
+    { id: "pack_100", name: "Bronze 100 Leads", credits: 100, price: 20, desc: "R$ 0,20 por lead avulso." },
+    { id: "pack_500", name: "Silver 500 Leads", credits: 500, price: 90, desc: "R$ 0,18 por lead avulso." },
+    { id: "pack_1000", name: "Gold 1000 Leads", credits: 1000, price: 160, desc: "R$ 0,16 por lead avulso." },
+    { id: "pack_5000", name: "Titanium 5000 Leads", credits: 5000, price: 750, desc: "Economia máxima e alta escala de SDR." }
   ];
 
-  const currentPack = creditPackages.find(p => p.id === selectedPack) || creditPackages[1];
+  const aiPackages = [
+    { id: "ai_100", name: "Smart 100 Mensagens", messages: 100, price: 10, desc: "Avanço pontual na IA do SDR." },
+    { id: "ai_500", name: "Premium 500 Mensagens", messages: 500, price: 40, desc: "Excelente para campanhas ativas." },
+    { id: "ai_1000", name: "Scale 1000 Mensagens", messages: 1000, price: 70, desc: "Abordagens inteligentes constantes." },
+    { id: "ai_5000", name: "Unlimited 5000 Mensagens", messages: 5000, price: 300, desc: "IA em fluxo de processamento total." }
+  ];
+
+  const selectedPack = activePurchaseTab === "leads" 
+    ? creditPackages.find(p => p.id === selectedPackId) || creditPackages[0]
+    : aiPackages.find(p => p.id === selectedPackId) || aiPackages[0];
 
   const loadFinancialData = async () => {
     if (!session) return;
     setLoading(true);
     try {
-      // 1. Load User Profile
+      // 1. Get User profile
       const userRef = doc(db, "users", session.id);
       const userSnap = await getDoc(userRef);
       if (userSnap.exists()) {
         setUserProfile(userSnap.data());
+      } else {
+        setUserProfile(session);
       }
 
       // 2. Load Subscription
@@ -70,7 +97,7 @@ export const Financeiro: React.FC<FinanceiroProps> = ({ session, triggerNotifica
       });
       setSubscription(foundSub);
 
-      // 3. Load Payments Sync
+      // 3. Load Payments list
       const paySnap = await getDocs(collection(db, "payments"));
       const listPay: SaaSPayment[] = [];
       paySnap.forEach(d => {
@@ -79,12 +106,31 @@ export const Financeiro: React.FC<FinanceiroProps> = ({ session, triggerNotifica
           listPay.push({ id: d.id, ...item });
         }
       });
-      // Sort payments by date DESC
       listPay.sort((a, b) => (b.date ? new Date(b.date).getTime() : 0) - (a.date ? new Date(a.date).getTime() : 0));
       setPayments(listPay);
 
+      // 4. Load AI Usage Stats
+      const usageRef = doc(db, "aiUsage", session.id);
+      const usageSnap = await getDoc(usageRef);
+      if (usageSnap.exists()) {
+        const u = usageSnap.data();
+        setAiUsage({
+          messagesUsed: u.messagesUsed || 0,
+          messagesLimit: u.messagesLimit || 20,
+          plan: u.plan || "Gratuito",
+          lastResetDate: u.lastResetDate || ""
+        });
+      } else {
+        setAiUsage({
+          messagesUsed: 0,
+          messagesLimit: 20,
+          plan: "Gratuito",
+          lastResetDate: ""
+        });
+      }
+
     } catch (err: any) {
-      console.error("Error loading financial data:", err.message);
+      console.error("[Financeiro] Error loading financial details:", err.message);
     } finally {
       setLoading(false);
     }
@@ -94,644 +140,866 @@ export const Financeiro: React.FC<FinanceiroProps> = ({ session, triggerNotifica
     loadFinancialData();
   }, [session]);
 
-  const handleBuyCredits = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!session) {
-      triggerNotification("Autenticação necessária para comprar créditos.", "warning");
-      return;
-    }
-
-    if (userProfile?.subscriptionStatus === "PAST_DUE") {
-      triggerNotification("Sua assinatura está em atraso. Regularize seu pagamento para comprar créditos.", "warning");
-      return;
-    }
-
-    setIsProcessing(true);
-    setPaymentSuccess(false);
-    triggerNotification(`Iniciando transação segura Asaas de R$ ${currentPack.price},00...`, "info");
-
-    setTimeout(() => {
-      setPendingCreditsPack(currentPack);
-      if (paymentMethod === "pix") {
-        const dummyPix = "00020126580014BR.GOV.BCB.PIX013660f7dfda-6111-477c-a49d-fb7486e0" + Math.floor(Math.random() * 90000 + 10000);
-        setPixCodeGenerated(dummyPix);
-        setPixQrUrl(`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=simulate_credits_pix_${currentPack.id}`);
-        triggerNotification("Chave PIX gerada via Asaas API. Pague para validar.", "info");
-      } else if (paymentMethod === "boleto") {
-        triggerNotification("Boleto bancário emitido via Asaas API. Efetue o pagamento sim.", "info");
-      } else {
-        triggerNotification("Transação de Cartão de Crédito pré-autorizada via Asaas. Confirme abaixo.", "info");
-      }
-      setIsProcessing(false);
-    }, 1200);
-  };
-
-  const handleConfirmCreditsPaymentSimulated = async () => {
-    if (!session || !pendingCreditsPack) return;
-    setIsProcessing(true);
-    triggerNotification("Compensando faturamento Asaas no Banco Central...", "info");
-
-    try {
-      const userRef = doc(db, "users", session.id);
-      const userSnap = await getDoc(userRef);
-      let previousCredits = 0;
-      let purchasedCredits = 0;
-      let planCredits = 0;
-      let bonusCredits = 0;
-
-      if (userSnap.exists()) {
-        const ud = userSnap.data();
-        previousCredits = ud.credits || 0;
-        purchasedCredits = ud.purchasedCredits || 0;
-        planCredits = ud.planCredits || 0;
-        bonusCredits = ud.bonusCredits || 0;
-      }
-
-      const addedCredits = pendingCreditsPack.credits;
-      const newTotalCredits = previousCredits + addedCredits;
-      const newPurchased = purchasedCredits + addedCredits;
-
-      // Perform Firestore update
-      await setDoc(userRef, {
-        credits: newTotalCredits,
-        purchasedCredits: newPurchased,
-        remainingCredits: planCredits + newPurchased + bonusCredits
-      }, { merge: true });
-
-      // Save payment history record
-      const payId = `pay_cre_${Date.now().toString(36)}`;
-      await setDoc(doc(db, "payments", payId), {
-        id: payId,
-        userId: session.id,
-        teamId: session.id,
-        date: new Date().toISOString(),
-        amount: pendingCreditsPack.price,
-        method: paymentMethod,
-        status: "RECEIVED",
-        link: "https://sandbox.asaas.com/payment/" + payId
-      });
-
-      // Add activity log
-      await setDoc(doc(db, "activityLogs", `log_${Date.now()}`), {
-        id: `log_${Date.now()}`,
-        userId: session.id,
-        userName: session.name || "Cliente",
-        action: "COMPRA_CREDITOS",
-        details: `Compra do pacote avulso de ${addedCredits} créditos (faturamento R$ ${pendingCreditsPack.price.toFixed(2)}) via gateway de pagamentos Asaas.`,
-        createdAt: new Date().toISOString()
-      });
-
-      triggerNotification(`Compra concedida! Adicionado ${addedCredits} créditos com sucesso.`, "success");
-      setPaymentSuccess(true);
-      setPendingCreditsPack(null);
-      setPixCodeGenerated(null);
-      setPixQrUrl(null);
-      setIsProcessing(false);
-      loadFinancialData();
-    } catch (err: any) {
-      triggerNotification(`Erro ao gravar créditos: ${err.message}`, "warning");
-      setIsProcessing(false);
-    }
-  };
-
+  // Timed checkout automatic simulator
   useEffect(() => {
-    if (!pendingCreditsPack) {
+    if (!activePendingPack) {
       setSecondsLeft(0);
       return;
     }
-    setSecondsLeft(12); // Give the user 12 seconds to "pay" or observe the live checking state
-  }, [pendingCreditsPack]);
+    setSecondsLeft(15);
+  }, [activePendingPack]);
 
   useEffect(() => {
-    if (secondsLeft <= 0) {
-      return;
-    }
+    if (secondsLeft <= 0) return;
     const timer = setTimeout(() => {
       setSecondsLeft(prev => {
         if (prev <= 1) {
-          // Trigger automatic compensation simulation on 0
-          handleConfirmCreditsPaymentSimulated();
+          handleAutoCompensateSimulatedPayment();
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
     return () => clearTimeout(timer);
-  }, [secondsLeft, pendingCreditsPack]);
+  }, [secondsLeft, activePendingPack]);
 
-  const handleDownloadInvoice = (pay: SaaSPayment) => {
-    triggerNotification(`Baixando comprovante da transação #${pay.id}...`, "success");
-    
-    // Generate dummy text content and download as proof
-    const content = `
-========================================
-    COMPROVANTE DE PAGAMENTO - ADSHIVE PROSPECT
-========================================
-ID da Transação: ${pay.id}
-Data do Pagamento: ${new Date(pay.date).toLocaleDateString()}
-Forma de Pagamento: ${pay.method.toUpperCase()}
-Valor Concluído: R$ ${pay.amount.toFixed(2)}
-Status: ${pay.status}
-Beneficiário: AdsHive Prospect Pro S.A.
-----------------------------------------
-Documento fiscal eletrônico nos termos da lei. 
-Agradecemos sua colaboração com nossa rede de negócios!
-========================================
-    `;
-    const element = document.createElement("a");
-    const file = new Blob([content], {type: "text/plain"});
-    element.href = URL.createObjectURL(file);
-    element.download = `comprovante_adshive_${pay.id}.txt`;
-    document.body.appendChild(element);
-    element.click();
-    document.body.removeChild(element);
-  };
-
-  // Days overdue calculation for report
-  const calculateDaysOverdue = (nextBillingDate: string | undefined): number => {
-    if (!nextBillingDate) return 5; // Fallback simulation
-    const diffTime = Date.now() - new Date(nextBillingDate).getTime();
-    const days = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    return days > 0 ? days : 5; // Guarantee logical overhead show
-  };
-
-  const planName = userProfile?.plan || "Gratuito";
-  const subStatus = userProfile?.subscriptionStatus || "ACTIVE";
+  // Pricing values helper
+  const planName = userProfile?.plan || session?.plan || "Gratuito";
+  const subStatus = userProfile?.subscriptionStatus || "ACTIVE"; // ACTIVE, PENDING, OVERDUE / PAST_DUE, CANCELED
   const availableCredits = userProfile?.credits || 0;
-  const purchasedCreditsTotal = userProfile?.purchasedCredits || 0;
   
-  // Total invested computation
-  const totalPaid = payments
-    .filter(p => p.status === "RECEIVED" || p.status === "CONFIRMED")
-    .reduce((acc, current) => acc + (current.amount || 0), 0);
-
-  // Price mapping
+  // Map monthly cost based on plan name
   const monthlyPrices: Record<string, number> = {
     "Gratuito": 0,
     "Free": 0,
     "Starter": 49,
     "Pro": 97,
     "Agência": 197,
+    "Agency": 197,
     "Enterprise": 497
   };
-  const monthlyCost = monthlyPrices[planName] || 97;
+  const monthlyCost = monthlyPrices[planName] ?? 97;
+
+  // Days remaining calculation
+  const calculateDaysRemaining = (): number => {
+    if (!subscription?.nextBillingDate) return 25; // Default fallback for simulation
+    const diff = new Date(subscription.nextBillingDate).getTime() - Date.now();
+    const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+    return days > 0 ? days : 0;
+  };
+
+  const calculateDaysOverdue = (): number => {
+    if (!subscription?.nextBillingDate) return 5;
+    const diff = Date.now() - new Date(subscription.nextBillingDate).getTime();
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    return days > 0 ? days : 5;
+  };
+
+  // Status visual mapping
+  const getStatusDetails = (status: string) => {
+    const s = status.toUpperCase();
+    if (s === "ACTIVE" || s === "ATIVA") {
+      return { label: "ATIVA", color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/30", indicator: "bg-emerald-500" };
+    }
+    if (s === "PENDING" || s === "EM_TESTE" || s === "TESTE") {
+      return { label: "EM TESTE", color: "text-sky-400 bg-sky-500/10 border-sky-500/30", indicator: "bg-sky-500" };
+    }
+    if (s === "CANCELED" || s === "CANCELADA") {
+      return { label: "CANCELADA", color: "text-rose-450 bg-rose-500/10 border-rose-500/30", indicator: "bg-rose-500" };
+    }
+    // Inadimplente, PAST_DUE, OVERDUE, atrasado
+    return { label: "EM ATRASO", color: "text-amber-400 bg-amber-500/10 border-amber-500/30", indicator: "bg-amber-500 animate-pulse" };
+  };
+
+  const currentStatus = getStatusDetails(subStatus);
+
+  // Extrato de Consumo - Mock data for last 30 days
+  const consumptionStats = [
+    { date: "09/05", leads: 45, ia: 30, queries: 12 },
+    { date: "14/05", leads: 80, ia: 55, queries: 24 },
+    { date: "19/05", leads: 120, ia: 90, queries: 40 },
+    { date: "24/05", leads: 190, ia: 145, queries: 63 },
+    { date: "29/05", leads: 240, ia: 210, queries: 80 },
+    { date: "03/06", leads: 320, ia: 270, queries: 105 },
+    { date: "08/06", leads: availableCredits, ia: aiUsage.messagesUsed, queries: 154 }
+  ];
+
+  // Initiate purchase flow
+  const handleInitiatePurchase = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!session) {
+      triggerNotification("Autenticação necessária para fazer compras.", "warning");
+      return;
+    }
+
+    if (subStatus === "PAST_DUE" || subStatus === "OVERDUE") {
+      triggerNotification("Sua conta está inadimplente. Regularize seu plano principal ou contate o financeiro.", "warning");
+      return;
+    }
+
+    setIsProcessing(true);
+    setPaymentSuccess(false);
+
+    const targetType = activePurchaseTab === "leads" ? "Leads" : "IA Mensagens";
+    triggerNotification(`Emitindo faturamento Asaas seguro para ${selectedPack.name} por R$ ${selectedPack.price},00...`, "info");
+
+    setTimeout(() => {
+      setActivePendingPack(selectedPack);
+      if (paymentMethod === "pix") {
+        const mockCode = `00020126580014BR.GOV.BCB.PIX0136adshive-prospect-asaas-pixkey-99${Math.floor(Math.random() * 90000 + 10000)}`;
+        setPixCode(mockCode);
+        setPixQr(`https://api.qrserver.com/v1/create-qr-code/?size=180x180&color=151520&bgcolor=ffffff&data=simulate_payment_adshive_prospect_${selectedPack.id}`);
+        triggerNotification("Chave Pix gerada com sucesso pela API Asaas Sandbox.", "info");
+      } else if (paymentMethod === "boleto") {
+        triggerNotification("Código de barras bancário gerado pela plataforma Asaas.", "info");
+      } else {
+        triggerNotification("Crédito pré-aprovado pela operadora. Confirme a captura segura Asaas.", "info");
+      }
+      setIsProcessing(false);
+    }, 1200);
+  };
+
+  // Perform automatic update of credits or AI message capacity upon checkout success
+  const handleAutoCompensateSimulatedPayment = async () => {
+    if (!session || !activePendingPack) return;
+    setIsProcessing(true);
+    triggerNotification("Gateway Asaas: Confirmando liquidação financeira do Pix...", "info");
+
+    try {
+      const payId = `pay_gate_${Date.now().toString(36)}`;
+      
+      // Save payment into firestore collections payments
+      await setDoc(doc(db, "payments", payId), {
+        id: payId,
+        userId: session.id,
+        teamId: session.id,
+        date: new Date().toISOString(),
+        amount: activePendingPack.price,
+        method: paymentMethod,
+        status: "RECEIVED",
+        link: "https://sandbox.asaas.com/comprovante/" + payId,
+        description: activePurchaseTab === "leads" 
+          ? `Pacote avulso de ${activePendingPack.credits} Leads` 
+          : `Pacote avulso de ${activePendingPack.messages} Mensagens IA`
+      });
+
+      // Update specific stats depending on pack type
+      if (activePurchaseTab === "leads") {
+        const userRef = doc(db, "users", session.id);
+        const userSnap = await getDoc(userRef);
+        const currentBal = userSnap.exists() ? (userSnap.data().credits || 0) : 0;
+        const currentPurchased = userSnap.exists() ? (userSnap.data().purchasedCredits || 0) : 0;
+
+        await setDoc(userRef, {
+          credits: currentBal + activePendingPack.credits,
+          purchasedCredits: currentPurchased + activePendingPack.credits
+        }, { merge: true });
+
+        // Action Audit log
+        const logId = `activity_${Date.now()}`;
+        await setDoc(doc(db, "activityLogs", logId), {
+          id: logId,
+          userId: session.id,
+          userName: session.name || "Cliente AdsHive",
+          action: "COMPRA_CREDITOS",
+          details: `Adicionado ${activePendingPack.credits} leads (+R$ ${activePendingPack.price.toFixed(2)}) via webhook gateway Asaas.`,
+          createdAt: new Date().toISOString()
+        });
+
+        triggerNotification(`Sucesso! ${activePendingPack.credits} Leads creditados em sua carteira AdsHive.`, "success");
+      } else {
+        // AI package addition
+        const usageRef = doc(db, "aiUsage", session.id);
+        const usageSnap = await getDoc(usageRef);
+        const currentLimit = usageSnap.exists() ? (usageSnap.data().messagesLimit || 20) : 20;
+
+        await setDoc(usageRef, {
+          messagesLimit: currentLimit + activePendingPack.messages
+        }, { merge: true });
+
+        // Action Audit log
+        const logId = `activity_${Date.now()}`;
+        await setDoc(doc(db, "activityLogs", logId), {
+          id: logId,
+          userId: session.id,
+          userName: session.name || "Cliente AdsHive",
+          action: "COMPRA_PACOTE_IA",
+          details: `Expandida cota do SDR Inteligente com +${activePendingPack.messages} mensagens via faturamento Asaas.`,
+          createdAt: new Date().toISOString()
+        });
+
+        triggerNotification(`Sucesso! +${activePendingPack.messages} Mensagens IA foram anexadas à sua cota do SDR.`, "success");
+      }
+
+      setPaymentSuccess(true);
+      setActivePendingPack(null);
+      setPixCode(null);
+      setPixQr(null);
+      setIsProcessing(false);
+      loadFinancialData();
+    } catch (err: any) {
+      triggerNotification(`Gateway Error: erro ao automatizar saldo: ${err.message}`, "warning");
+      setIsProcessing(false);
+    }
+  };
+
+  // Other dynamic actions
+  const handleGeneralAction = async (type: "cancel" | "update_card" | "change_plan") => {
+    if (!session) return;
+    setIsProcessing(true);
+    triggerNotification(`Enviando solicitação operacional para o ecossistema Asaas...`, "info");
+
+    try {
+      if (type === "cancel") {
+        // Update user profile status
+        await setDoc(doc(db, "users", session.id), {
+          subscriptionStatus: "CANCELED",
+          plan: "Gratuito"
+        }, { merge: true });
+
+        // Update subscriptions collection
+        const subSnap = await getDocs(collection(db, "subscriptions"));
+        subSnap.forEach(async (d) => {
+          const item = d.data();
+          if (item.userId === session.id) {
+            await setDoc(doc(db, "subscriptions", d.id), { status: "CANCELED" }, { merge: true });
+          }
+        });
+
+        triggerNotification("Sua assinatura foi devidamente cancelada. Sentiremos sua falta!", "success");
+      } else if (type === "update_card") {
+        triggerNotification("Dados de cobrança de cartão de crédito atualizados no gateway Asaas.", "success");
+      } else if (type === "change_plan") {
+        // Change user plan
+        await setDoc(doc(db, "users", session.id), {
+          plan: newSelectedPlanName,
+          subscriptionStatus: "ACTIVE"
+        }, { merge: true });
+
+        triggerNotification(`Upgrade de plano para ${newSelectedPlanName.toUpperCase()} realizado com sucesso!`, "success");
+      }
+
+      setActiveActionModal(null);
+      setIsProcessing(false);
+      loadFinancialData();
+    } catch (e: any) {
+      triggerNotification(`Erro ao alterar assinatura: ${e.message}`, "warning");
+      setIsProcessing(false);
+    }
+  };
+
+  const handleDownloadProof = (pay: SaaSPayment) => {
+    triggerNotification(`Gerando PDF comprovante fiscal da transação #${pay.id}...`, "success");
+    const proofText = `
+==================================================
+        COMPROVANTE DE PAGAMENTO DE SERVIÇO
+               ADSHIVE PROSPECT SaaS
+==================================================
+Identificação da Fatura: ${pay.id}
+Email do Comprador: ${session?.email || "cadastro@adshive.online"}
+Data de Liquidação: ${pay.date ? new Date(pay.date).toLocaleString("pt-BR") : "Imediato"}
+Gateway Emissor: Asaas S.A. Pagamentos Seguros
+Forma de Pagamento: ${pay.method ? pay.method.toUpperCase() : "PIX"}
+Valor Líquido Recebido: R$ ${(pay.amount || 0).toFixed(2)}
+Status da Operação: ${pay.status === "RECEIVED" || pay.status === "CONFIRMED" ? "LIQUIDADO / CONFIRMADO" : "PENDENTE"}
+==================================================
+Gerado automaticamente pelo AdsHive Prospect S.A.
+Todos os direitos reservados.
+    `;
+    const element = document.createElement("a");
+    const file = new Blob([proofText], {type: "text/plain"});
+    element.href = URL.createObjectURL(file);
+    element.download = `comprovante_fiscal_adshive_${pay.id}.txt`;
+    document.body.appendChild(element);
+    element.click();
+    document.body.removeChild(element);
+  };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-300">
-      {/* Page Title */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-8 animate-in fade-in duration-300 text-left text-white font-sans max-w-7xl mx-auto pb-12">
+      
+      {/* Title block formatted with AdsHive Glow Design */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-purple-950 pb-6">
         <div>
-          <span className="bg-[#8B2EFF]/25 text-[#8B2EFF] text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider">
-            Financeiro AdsHive Prospect
-          </span>
-          <h2 className={`text-3xl font-extrabold mt-1 tracking-tight ${themeMode === "light" ? "text-slate-900" : "text-white"}`}>
-            Painel Financeiro
+          <div className="flex items-center gap-2 mb-2">
+            <span className="bg-[#8A2BE2]/20 border border-[#B026FF]/30 text-[#D946EF] text-[10px] font-extrabold px-3.5 py-1 rounded-full uppercase tracking-widest shadow-[0_0_15px_rgba(138,43,226,0.2)]">
+              SaaS Financial Center
+            </span>
+            <span className="text-[10px] bg-slate-900 border border-slate-800 text-slate-400 px-2 py-1 rounded font-mono">
+              v1.6 API Asaas
+            </span>
+          </div>
+          <h2 className="text-3xl font-black tracking-tight text-white flex items-center gap-2 bg-gradient-to-r from-white via-slate-100 to-[#D946EF] bg-clip-text text-transparent">
+            Painel Financeiro do Cliente
           </h2>
-          <p className="text-slate-500 text-sm">Gerencie faturas de assinatura, histórico fiscal e compre pacotes adicionais de leads.</p>
+          <p className="text-slate-400 text-sm mt-1">Conectado ao ambiente seguro do AdsHive. Gerencie cobranças, cotas de prospecção e IA de SDR.</p>
         </div>
 
-        <div className="flex gap-2.5">
+        <div className="flex gap-2.5 shrink-0 self-start md:self-auto">
           <button 
-            onClick={() => setActiveTab("loja_creditos")}
-            className="px-4 py-2.5 rounded-xl border border-slate-300 font-bold text-xs bg-white text-slate-700 hover:bg-slate-50 transition-all flex items-center gap-1.5"
+            onClick={() => setActiveTab("comercial")}
+            className="px-4 py-2.5 rounded-xl border border-purple-900/40 text-slate-300 font-bold text-xs bg-[#151520]/80 hover:bg-[#1A1A2A] shadow-md hover:border-[#8A2BE2] transition-all flex items-center gap-1.5 cursor-pointer"
           >
-            <Coins className="w-4 h-4 text-amber-500 animate-pulse" />
-            <span>Comprar Créditos</span>
+            <Settings className="w-4 h-4 text-[#B026FF]" />
+            <span>Planos Principais</span>
           </button>
+          
           <button 
+            type="button"
             onClick={() => {
-              triggerNotification("Fazer Upgrade de Assinatura - Redirecionando para grade de planos...", "info");
-              // Set the active tab to comercial tab and plans subtab
-              setActiveTab("comercial");
+              setActivePurchaseTab("leads");
+              const el = document.getElementById("recarregar-saldo-card");
+              if (el) el.scrollIntoView({ behavior: "smooth" });
             }}
-            className="px-5 py-2.5 rounded-xl font-bold text-xs bg-[#8B2EFF] text-white hover:bg-[#7424D9] shadow-md transition-all flex items-center gap-1.5"
+            className="px-5 py-2.5 rounded-xl font-black text-xs bg-[#8A2BE2] hover:bg-[#B026FF] text-white hover:shadow-[0_0_20px_rgba(176,38,255,0.4)] transition-all flex items-center gap-1.5 cursor-pointer"
           >
-            <ArrowUpRight className="w-4 h-4" />
-            <span>Fazer Upgrade</span>
+            <Coins className="w-4 h-4 text-amber-300" />
+            <span>Investir Cota</span>
           </button>
         </div>
       </div>
 
-      {/* Red Alert Banner and Overdue Automatic Report */}
+      {/* Extreme Overdue Alarm Warning Banner */}
       {subStatus === "PAST_DUE" && (
-        <div className="space-y-4">
-          <div className="bg-red-500 text-white p-5 rounded-2xl flex items-start gap-4 shadow-lg border border-red-400">
-            <ShieldAlert className="w-6 h-6 text-white shrink-0 animate-bounce" />
-            <div className="space-y-1 flex-1 text-left">
-              <strong className="text-base font-black uppercase tracking-wider block">Assinatura em Atraso</strong>
-              <p className="text-sm font-medium">
-                Sua assinatura está em atraso. Regularize seu pagamento para continuar utilizando a plataforma.
-              </p>
-              <div className="text-xs text-red-100 mt-2 font-mono bg-red-600/40 p-2 rounded-lg inline-block">
-                Bloqueios Ativos: Consultas ao Maps suspensas • CRM marcado como Somente Leitura • Proibido compras de pacotes avulsos.
+        <div className="space-y-4 animate-bounce">
+          <div className="bg-gradient-to-r from-red-950 via-rose-900 to-[#0A0A0F] border-2 border-red-500 shadow-[0_0_25px_rgba(239,68,68,0.35)] text-white p-5 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-start gap-4">
+              <ShieldAlert className="w-8 h-8 text-red-500 shrink-0" />
+              <div className="space-y-1">
+                <span className="text-[10px] bg-red-650 text-white font-black px-2 py-0.5 rounded tracking-wider uppercase">Conta Bloqueada por Pendência</span>
+                <strong className="text-lg font-black block text-red-100">Faturamento em Atraso no Asaas</strong>
+                <p className="text-slate-300 text-xs opacity-90 max-w-xl">
+                  Seus acessos de consultas ao Maps e abordagens com IA foram restritos. Regularize o faturamento agilmente para desbloquear os robôs comercializadores.
+                </p>
               </div>
             </div>
             <button 
-              onClick={() => setActiveTab("comercial")}
-              className="bg-white text-red-600 font-black text-xs px-4 py-2 rounded-xl border-none hover:bg-red-50 transition-all"
+              onClick={() => setActiveActionModal("change_plan")}
+              className="bg-red-500 hover:bg-emerald-600 font-extrabold text-xs px-5 py-3 rounded-xl border-none transition-all cursor-pointer self-stretch md:self-auto text-center"
             >
-              Pagar Fatura
+              Completar Pagamento PIX
             </button>
           </div>
 
-          {/* DYNAMIC COMPREHENSIVE OVERDUE REPORT */}
-          <div className={`${themeMode === "light" ? "bg-white border-red-200" : "bg-[#1E1215] border-red-500/30"} border-2 p-6 rounded-2xl shadow-sm text-left`}>
-            <div className="flex items-center gap-2 mb-4 border-b pb-3 border-red-100 dark:border-red-950/40">
-              <AlertTriangle className="w-5 h-5 text-red-500" />
-              <h4 className="font-extrabold text-sm text-red-500 uppercase tracking-widest">
-                Relatório de Inadimplência Gerado Automaticamente
-              </h4>
+          {/* Detailed overdue dynamic card required by user */}
+          <div className="bg-[#151520] border border-red-500/30 p-6 rounded-2xl flex flex-col gap-3">
+            <div className="flex items-center gap-2 pb-3 border-b border-purple-950">
+              <AlertTriangle className="w-4 h-4 text-red-400" />
+              <span className="text-[11px] uppercase font-black text-red-400 tracking-wider">Detalhamento fiscal de cobrança em aberto</span>
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
-              <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#131114]">
-                <span className="text-slate-400 block font-bold mb-1">USUÁRIO AFETADO</span>
-                <p className={`text-sm font-extrabold ${themeMode === "light" ? "text-slate-800" : "text-white"}`}>
-                  {userProfile?.name || "Douglas CMA"}
-                </p>
-                <span className="text-[10px] text-slate-400 block mt-0.5">{userProfile?.email || "douglas_teste@adshive.com"}</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs pt-1">
+              <div>
+                <span className="text-slate-400 block font-bold mb-0.5">Assinante:</span>
+                <p className="font-extrabold text-white text-sm">{userProfile?.name || session?.name || "Douglas Bateria"}</p>
+                <p className="text-[10px] text-slate-500 font-mono mt-0.5">{userProfile?.email || session?.email}</p>
               </div>
-
-              <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#131114]">
-                <span className="text-slate-400 block font-bold mb-1">PLANO ASSINADO</span>
-                <p className="text-sm font-extrabold text-indigo-500 uppercase">
-                  {planName}
-                </p>
-                <span className="text-[10px] text-slate-400 block mt-0.5">R$ {monthlyCost},00/mês</span>
+              <div>
+                <span className="text-slate-400 block font-bold mb-0.5">Mensalidade:</span>
+                <span className="text-sm font-extrabold text-[#D946EF] uppercase">{planName}</span>
+                <p className="text-[10px] text-slate-500">R$ {monthlyCost},00 por ciclo</p>
               </div>
-
-              <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#131114]">
-                <span className="text-slate-400 block font-bold mb-1">DATA DO VENCIMENTO</span>
-                <p className={`text-sm font-mono font-extrabold ${themeMode === "light" ? "text-slate-700" : "text-slate-200"}`}>
-                  {subscription?.nextBillingDate ? new Date(subscription.nextBillingDate).toLocaleDateString() : new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toLocaleDateString()}
+              <div>
+                <span className="text-slate-400 block font-bold mb-0.5">Fatura Vencida em:</span>
+                <p className="font-mono text-sm text-red-400 font-bold">
+                  {subscription?.nextBillingDate ? new Date(subscription.nextBillingDate).toLocaleDateString("pt-BR") : new Date(Date.now() - 5*24*60*60*1000).toLocaleDateString()}
                 </p>
-                <span className="text-[10px] text-red-500 font-bold block mt-0.5">Vencimento Expirado</span>
               </div>
-
-              <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/20">
-                <span className="text-red-500 block font-bold mb-1">DIAS EM ATRASO</span>
-                <p className="text-base font-black text-red-600 dark:text-red-400">
-                  {calculateDaysOverdue(subscription?.nextBillingDate)} Dias
-                </p>
-                <span className="text-[10px] text-red-500 font-semibold block mt-0.5">Fatura Pendente Asaas</span>
+              <div className="bg-rose-950/20 p-2.5 rounded-xl border border-red-500/15">
+                <span className="text-red-400 block font-bold text-[10px] mb-0.5">Dias de Inadimplência:</span>
+                <p className="text-slate-200 text-sm font-black font-mono">{calculateDaysOverdue()} Dias Corridos</p>
+                <span className="text-[9px] text-red-300 font-semibold mt-0.5 block">API status: INADIMPLENTE</span>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Financial Overview Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 text-left">
-        {/* Plano Atual */}
-        <div className={`p-6 rounded-2xl border ${themeMode === "light" ? "bg-white border-slate-200" : "bg-[#1C1C26] border-[#2B2B3A]"} shadow-sm`}>
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Plano Atual</span>
-          <div className="flex items-baseline gap-1.5">
-            <h4 className="text-2xl font-black text-[#8B2EFF]">{planName}</h4>
-            <span className="text-xs text-slate-400 font-semibold">Mensal</span>
+      {/* RESUMO FINANCEIRO - 7 Cards metrics as strictly requested */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-4">
+        
+        {/* Card 1: Plano Atual */}
+        <div className="bg-[#151520] border border-purple-950 p-4.5 rounded-2xl flex flex-col justify-between shadow-lg relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-br from-[#8A2BE2]/10 to-transparent rounded-bl-full pointer-events-none"></div>
+          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Plano Atual</span>
+          <div className="mt-3">
+            <h4 className="text-lg font-black text-[#D946EF] group-hover:text-[#B026FF] transition-all truncate uppercase">{planName}</h4>
+            <span className="text-[10px] text-slate-400 font-semibold block mt-0.5 bg-slate-900/60 w-max px-1.5 py-0.5 rounded border border-purple-950">Mensal</span>
           </div>
-          <p className="text-xs text-slate-500 mt-2 font-medium">Assinatura do ecossistema inteligente.</p>
         </div>
 
-        {/* Status */}
-        <div className={`p-6 rounded-2xl border ${themeMode === "light" ? "bg-white border-slate-200" : "bg-[#1C1C26] border-[#2B2B3A]"} shadow-sm`}>
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Status da Assinatura</span>
-          <div className="flex items-center gap-2 mt-1">
-            <span className={`w-3 h-3 rounded-full ${
-              subStatus === "ACTIVE" ? "bg-emerald-500" :
-              subStatus === "PAST_DUE" ? "bg-red-500 animate-pulse" :
-              subStatus === "CANCELED" ? "bg-slate-400" : "bg-amber-500"
-            }`}></span>
-            <span className="text-lg font-extrabold uppercase">
-              {subStatus === "ACTIVE" ? "Ativo" :
-               subStatus === "PAST_DUE" ? "Inadimplente (Atraso)" :
-               subStatus === "CANCELED" ? "Cancelado" : "Pendente"}
+        {/* Card 2: Status da Assinatura (Color coded Verde, Amarelo, Vermelho, Azul as required) */}
+        <div className="bg-[#151520] border border-purple-950 p-4.5 rounded-2xl flex flex-col justify-between shadow-lg">
+          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Status</span>
+          <div className="mt-3">
+            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-widest border ${currentStatus.color}`}>
+              <span className={`w-2 h-2 rounded-full ${currentStatus.indicator}`}></span>
+              <span>{currentStatus.label}</span>
             </span>
+            <span className="text-[9px] text-slate-500 block mt-1.5 font-sans leading-none">Status cobrado via Asaas</span>
           </div>
-          {subStatus === "ACTIVE" && (
-            <p className="text-xs text-slate-500 mt-2 font-medium">Renova automaticamente via Pix/Cartão.</p>
-          )}
-          {subStatus === "PAST_DUE" && (
-            <p className="text-xs text-red-500 mt-2 font-bold">Consulte o relatório de cobrança pendente.</p>
-          )}
-          {subStatus === "CANCELED" && (
-            <p className="text-sm text-amber-500 mt-2 font-medium">Sentimos sua saída. Reative a qualquer momento.</p>
-          )}
         </div>
 
-        {/* Monthly Cost & Billing info */}
-        <div className={`p-6 rounded-2xl border ${themeMode === "light" ? "bg-white border-slate-200" : "bg-[#1C1C26] border-[#2B2B3A]"} shadow-sm`}>
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Valor Mensal</span>
-          <div className="flex items-baseline gap-1">
-            <h4 className="text-2xl font-black">R$ {monthlyCost}</h4>
-            <span className="text-xs text-slate-400 font-semibold">/mês</span>
+        {/* Card 3: Próxima Cobrança */}
+        <div className="bg-[#151520] border border-purple-950 p-4.5 rounded-2xl flex flex-col justify-between shadow-lg">
+          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Próxima Cobrança</span>
+          <div className="mt-3">
+            <span className="text-base font-bold font-mono text-white block">
+              {subscription?.nextBillingDate ? new Date(subscription.nextBillingDate).toLocaleDateString("pt-BR") : "Mês corrente"}
+            </span>
+            <span className="text-[9px] text-slate-400 font-semibold block mt-1">Fatura recorrente automática</span>
           </div>
-          <p className="text-xs text-slate-500 mt-2 font-medium">
-            Próxima Cobrança: <strong className="font-mono">{subscription?.nextBillingDate ? new Date(subscription.nextBillingDate).toLocaleDateString() : "Sem cobranças"}</strong>
-          </p>
         </div>
 
-        {/* Investimento Total */}
-        <div className={`p-6 rounded-2xl border ${themeMode === "light" ? "bg-white border-slate-200" : "bg-[#1C1C26] border-[#2B2B3A]"} shadow-sm`}>
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Total Investido na Plataforma</span>
-          <h4 className="text-2xl font-black text-emerald-500">R$ {totalPaid.toFixed(2)}</h4>
-          <p className="text-xs text-slate-500 mt-2 font-medium">Faturamento acumulado pelo usuário.</p>
+        {/* Card 4: Créditos Disponíveis */}
+        <div className="bg-[#151520] border border-purple-950 p-4.5 rounded-2xl flex flex-col justify-between shadow-lg relative group">
+          <div className="absolute top-1 right-2 shrink-0">
+            <Coins className="w-4 h-4 text-amber-400 animate-pulse" />
+          </div>
+          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Leads Disponíveis</span>
+          <div className="mt-3">
+            <h4 className="text-2xl font-black text-white font-mono leading-none">{availableCredits}</h4>
+            <span className="text-[10px] text-amber-200 font-bold block mt-1">Pesquisas no Maps</span>
+          </div>
+        </div>
+
+        {/* Card 5: Mensagens IA Disponíveis */}
+        <div className="bg-[#151520] border border-purple-950 p-4.5 rounded-2xl flex flex-col justify-between shadow-lg relative group">
+          <div className="absolute top-1 right-2 shrink-0">
+            <Sparkles className="w-4 h-4 text-[#D946EF]" />
+          </div>
+          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Mensagens IA</span>
+          <div className="mt-3">
+            <h4 className="text-2xl font-black text-[#D946EF] font-mono leading-none">
+              {(session?.email || '').toLowerCase() === 'douglasbateriacma@gmail.com' ? "∞" : Math.max(0, aiUsage.messagesLimit - aiUsage.messagesUsed)}
+            </h4>
+            <span className="text-[9px] text-slate-400 block mt-1">Quota de SDR atualizada</span>
+          </div>
+        </div>
+
+        {/* Card 6: Valor Mensal */}
+        <div className="bg-[#151520] border border-purple-950 p-4.5 rounded-2xl flex flex-col justify-between shadow-lg">
+          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Valor Mensal</span>
+          <div className="mt-3">
+            <h4 className="text-xl font-black text-white font-mono leading-none">R$ {monthlyCost}</h4>
+            <span className="text-[9px] text-slate-450 block mt-1">Recorrência ativa</span>
+          </div>
+        </div>
+
+        {/* Card 7: Dias Restantes */}
+        <div className="bg-[#151520] border border-purple-950 p-4.5 rounded-2xl flex flex-col justify-between shadow-lg">
+          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Dias Restantes</span>
+          <div className="mt-3">
+            <h4 className="text-2xl font-black text-purple-400 font-mono leading-none">
+              {subStatus === "PAST_DUE" ? 0 : calculateDaysRemaining()} Dias
+            </h4>
+            <span className="text-[9px] text-slate-450 block mt-1">Para renovação Asaas</span>
+          </div>
+        </div>
+
+      </div>
+
+      {/* GERENCIAR ASSINATURA actions bar with requested buttons */}
+      <div className="bg-[#151520] border border-purple-950 p-6 rounded-3xl text-left relative overflow-hidden shadow-xl">
+        <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-bl from-[#8A2BE2]/5 via-transparent to-transparent pointer-events-none"></div>
+        <div>
+          <h3 className="text-lg font-black tracking-tight text-white flex items-center gap-2">
+            <CreditCard className="w-5 h-5 text-[#B026FF]" />
+            <span>Gerenciar Assinatura SaaS</span>
+          </h3>
+          <p className="text-xs text-slate-400 mt-1">Altere sua assinatura de faturamento direto ou mude configurações do cartão de crédito cadastrado.</p>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3.5 mt-5">
+          <button 
+            onClick={() => setActiveActionModal("change_plan")}
+            className="px-4 py-3 rounded-xl font-bold text-xs bg-[#8A2BE2]/10 hover:bg-[#8A2BE2]/20 border border-[#8A2BE2]/30 text-[#D946EF] cursor-pointer transition-all text-center flex items-center justify-center gap-1.5"
+          >
+            <ArrowRight className="w-4 h-4 shrink-0" />
+            <span>Alterar Plano</span>
+          </button>
+
+          <button 
+            onClick={() => {
+              setActivePurchaseTab("leads");
+              const el = document.getElementById("recarregar-saldo-card");
+              if (el) el.scrollIntoView({ behavior: "smooth" });
+            }}
+            className="px-4 py-3 rounded-xl font-bold text-xs bg-slate-900 hover:bg-slate-800 border border-slate-800 text-white cursor-pointer transition-all text-center flex items-center justify-center gap-1.5"
+          >
+            <Coins className="w-4 h-4 shrink-0 text-amber-400" />
+            <span>Comprar Créditos</span>
+          </button>
+
+          <button 
+            onClick={() => {
+              setActivePurchaseTab("ia");
+              const el = document.getElementById("recarregar-saldo-card");
+              if (el) el.scrollIntoView({ behavior: "smooth" });
+            }}
+            className="px-4 py-3 rounded-xl font-bold text-xs bg-[#B026FF]/10 hover:bg-[#B026FF]/20 border border-[#B026FF]/25 text-[#D946EF] cursor-pointer transition-all text-center flex items-center justify-center gap-1.5"
+          >
+            <Sparkles className="w-4 h-4 shrink-0 text-[#D946EF]" />
+            <span>Comprar Pacote IA</span>
+          </button>
+
+          <button 
+            onClick={() => setActiveActionModal("update_card")}
+            className="px-4 py-3 rounded-xl font-bold text-xs bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 cursor-pointer transition-all text-center flex items-center justify-center gap-1.5"
+          >
+            <CreditCard className="w-4 h-4 shrink-0 text-slate-400" />
+            <span>Atualizar Cartão</span>
+          </button>
+
+          <button 
+            onClick={() => setActiveActionModal("cancel")}
+            className="px-4 py-3 rounded-xl font-bold text-xs bg-red-950/10 hover:bg-red-950/30 border border-red-900/30 text-red-400 cursor-pointer transition-all text-center flex items-center justify-center gap-1.5"
+          >
+            <ShieldAlert className="w-4 h-4 shrink-0" />
+            <span>Cancelar Assinatura</span>
+          </button>
         </div>
       </div>
 
-      {/* Credit Pool Metadata */}
-      <div className={`p-6 rounded-2xl border ${themeMode === "light" ? "bg-slate-50" : "bg-[#111116] border-[#222230]"} text-left`}>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="space-y-1">
-            <span className="text-slate-400 font-extrabold text-[10px] tracking-widest block uppercase">Créditos Disponíveis</span>
-            <div className="flex items-center gap-2">
-              <Coins className="w-5 h-5 text-amber-500" />
-              <span className={`text-xl font-black ${themeMode === "light" ? "text-slate-800" : "text-white"}`}>{availableCredits} Leads</span>
-            </div>
-          </div>
-          
-          <div className="space-y-1 border-t md:border-t-0 md:border-l border-slate-200 dark:border-slate-800 pt-3 md:pt-0 md:pl-6">
-            <span className="text-slate-400 font-extrabold text-[10px] tracking-widest block uppercase">Créditos Comprados (Avulsos)</span>
-            <div className="flex items-center gap-2">
-              <ArrowUpRight className="w-5 h-5 text-indigo-500" />
-              <span className={`text-xl font-black ${themeMode === "light" ? "text-slate-800" : "text-white"}`}>{purchasedCreditsTotal} Leads</span>
-            </div>
-          </div>
-
-          <div className="space-y-1 border-t md:border-t-0 md:border-l border-slate-200 dark:border-slate-800 pt-3 md:pt-0 md:pl-6">
-            <span className="text-slate-400 font-extrabold text-[10px] tracking-widest block uppercase">Créditos Utilizados</span>
-            <div className="flex items-center gap-2">
-              <CheckCircle className="w-5 h-5 text-emerald-500" />
-              <span className={`text-xl font-black ${themeMode === "light" ? "text-slate-800" : "text-white"}`}>
-                {/* Dynamically simulated usage */}
-                {Math.max(10, purchasedCreditsTotal + 10 - availableCredits)} Leads
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 text-left">
-        {/* BUY CREDITS MODULE */}
-        <div className="lg:col-span-3 space-y-6">
-          <div className={`p-6 rounded-3xl border ${themeMode === "light" ? "bg-white border-slate-200" : "bg-[#1C1C26] border-[#2B2B3A]"} shadow-sm space-y-4`}>
+      {/* Main interactive area: Purchase packages list module ("PACOTES DE CRÉDITOS" & "PACOTES DE IA") */}
+      <div id="recarregar-saldo-card" className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        
+        {/* Recarregar Saldo Segment (Col 8) */}
+        <div className="lg:col-span-8 bg-[#151520] border border-purple-950 rounded-3xl p-6 shadow-xl relative text-left">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-purple-950/60 pb-5 gap-3">
             <div>
-              <h3 className={`text-lg font-extrabold ${themeMode === "light" ? "text-slate-900" : "text-white"}`}>Comprar Créditos para Prospecção</h3>
-              <p className="text-xs text-slate-500 leading-normal">
-                Compre leads adicionais livremente sem validade contratual. Margem de custo fixa estimada em <strong>R$ 0,20</strong> por lead capturado.
-              </p>
+              <span className="text-[10px] uppercase font-black text-[#D946EF] tracking-wider block">Estoque de Abastecimento Adicional</span>
+              <h3 className="text-xl font-black text-white">Comprar Recargas via Asaas</h3>
+              <p className="text-slate-400 text-xs mt-0.5">Saldo ativado em segundos no ato da compensação bancária.</p>
             </div>
 
-            {subStatus === "PAST_DUE" ? (
-              <div className="p-4 rounded-2xl bg-red-50 border border-red-200 text-xs text-red-800">
-                A compra de créditos e prospecções avulsas está bloqueada enquanto sua conta constar com faturamento inadimplente. 
-                Regularize sua assinatura ao lado para desbloquear suas transações.
-              </div>
-            ) : (
-              <form onSubmit={handleBuyCredits} className="space-y-6">
-                {/* Package select */}
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Selecione o volume de Leads</label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {creditPackages.map((pack) => (
-                      <div 
-                        key={pack.id}
-                        onClick={() => {
-                          setSelectedPack(pack.id);
-                          setPaymentSuccess(false);
-                        }}
-                        className={`p-4 rounded-2xl border-2 cursor-pointer transition-all ${
-                          selectedPack === pack.id 
-                            ? "border-[#8B2EFF] bg-[#8B2EFF]/5"
-                            : themeMode === "light" ? "border-slate-200 bg-white hover:bg-slate-50" : "border-[#2b2b3a] bg-[#111118] hover:bg-[#161622]"
-                        }`}
-                      >
-                        <div className="flex justify-between items-center">
-                          <strong className="text-sm font-bold block">{pack.name}</strong>
-                          <span className="text-xs font-black text-emerald-500">R$ {pack.price},00</span>
-                        </div>
-                        <p className="text-[11px] text-slate-440 font-medium mt-1">{pack.description}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+            {/* Selector bar leads / ia */}
+            <div className="flex bg-slate-900 p-1.5 rounded-xl border border-purple-950/80 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setActivePurchaseTab("leads");
+                  setSelectedPackId("pack_100");
+                }}
+                className={`px-4.5 py-2 rounded-lg font-extrabold text-xs transition-all cursor-pointer ${
+                  activePurchaseTab === "leads" 
+                    ? "bg-[#8A2BE2] text-white shadow-md shadow-purple-950" 
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                Créditos (Leads)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActivePurchaseTab("ia");
+                  setSelectedPackId("ai_100");
+                }}
+                className={`px-4.5 py-2 rounded-lg font-extrabold text-xs transition-all cursor-pointer ${
+                  activePurchaseTab === "ia" 
+                    ? "bg-[#8A2BE2] text-white shadow-md shadow-purple-950" 
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                SDR IA (Abordagem)
+              </button>
+            </div>
+          </div>
 
-                {/* Method select */}
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Método de Cobrança</label>
-                  <div className="grid grid-cols-3 gap-3">
-                    <button 
-                      type="button"
-                      onClick={() => setPaymentMethod("pix")}
-                      className={`py-3 rounded-2xl border font-bold text-xs transition-all ${
-                        paymentMethod === "pix"
-                          ? "bg-slate-900 border-slate-900 text-white"
-                          : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
-                      }`}
-                    >
-                      PIX Seguro
-                    </button>
-                    <button 
-                      type="button"
-                      onClick={() => setPaymentMethod("card")}
-                      className={`py-3 rounded-2xl border font-bold text-xs transition-all ${
-                        paymentMethod === "card"
-                          ? "bg-slate-900 border-slate-900 text-white"
-                          : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
-                      }`}
-                    >
-                      Crédito Visa/Mestre
-                    </button>
-                    <button 
-                      type="button"
-                      onClick={() => setPaymentMethod("boleto")}
-                      className={`py-3 rounded-2xl border font-bold text-xs transition-all ${
-                        paymentMethod === "boleto"
-                          ? "bg-slate-900 border-slate-900 text-white"
-                          : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
-                      }`}
-                    >
-                      Boleto Bancário
-                    </button>
-                  </div>
-                </div>
-
-                {/* Credit Card Details simulation fields */}
-                {paymentMethod === "card" && (
-                  <div className="p-4 bg-slate-50 dark:bg-[#111116] rounded-2xl border space-y-3">
-                    <span className="text-[10px] font-bold text-slate-400 block tracking-widest uppercase">Formulário de Cobrança Cartão</span>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="col-span-2">
-                        <input 
-                          type="text" 
-                          placeholder="Número do Cartão de Crédito"
-                          value={cardNumber}
-                          onChange={(e) => setCardNumber(e.target.value)}
-                          className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-mono outline-none text-slate-800" 
-                        />
-                      </div>
-                      <div className="col-span-2">
-                        <input 
-                          type="text" 
-                          placeholder="Nome Completo do Titular"
-                          value={cardName}
-                          onChange={(e) => setCardName(e.target.value)}
-                          className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none text-slate-800" 
-                        />
-                      </div>
-                      <div>
-                        <input 
-                          type="text" 
-                          placeholder="Expiração (MM/AA)"
-                          value={cardExpiry}
-                          onChange={(e) => setCardExpiry(e.target.value)}
-                          className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-semibold outline-none text-slate-800" 
-                        />
-                      </div>
-                      <div>
-                        <input 
-                          type="text" 
-                          placeholder="CVC/CVV"
-                          value={cardCvv}
-                          onChange={(e) => setCardCvv(e.target.value)}
-                          className="w-full bg-white border rounded-xl px-3 py-2 text-xs font-mono outline-none text-slate-800" 
-                        />
-                      </div>
+          <form onSubmit={handleInitiatePurchase} className="space-y-6 pt-5">
+            {/* Grid display package selections as requested */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {activePurchaseTab === "leads" ? (
+                creditPackages.map(pack => (
+                  <div
+                    key={pack.id}
+                    onClick={() => {
+                      setSelectedPackId(pack.id);
+                      setPaymentSuccess(false);
+                    }}
+                    className={`p-4 rounded-2xl border-2 cursor-pointer transition-all relative overflow-hidden flex flex-col justify-between ${
+                      selectedPackId === pack.id
+                        ? "border-[#B026FF] bg-[#8A2BE2]/5 shadow-[0_0_15px_rgba(138,43,226,0.15)]"
+                        : "border-purple-950/40 bg-[#0A0A0F]/80 hover:bg-[#111118]"
+                    }`}
+                  >
+                    <div className="flex justify-between items-center mb-1">
+                      <strong className="text-sm font-black text-white">{pack.name}</strong>
+                      <span className="text-xs font-black text-emerald-400">R$ {pack.price}</span>
                     </div>
+                    <p className="text-[11px] text-slate-400 font-medium leading-normal mb-1">{pack.desc}</p>
+                    <span className="text-[10px] text-amber-300 font-mono font-bold mt-2 flex items-center gap-1">
+                      <Coins className="w-3.5 h-3.5" />
+                      <span>{pack.credits} Leads Adicionados</span>
+                    </span>
                   </div>
-                )}
+                ))
+              ) : (
+                aiPackages.map(pack => (
+                  <div
+                    key={pack.id}
+                    onClick={() => {
+                      setSelectedPackId(pack.id);
+                      setPaymentSuccess(false);
+                    }}
+                    className={`p-4 rounded-2xl border-2 cursor-pointer transition-all relative overflow-hidden flex flex-col justify-between ${
+                      selectedPackId === pack.id
+                        ? "border-[#B026FF] bg-[#8A2BE2]/5 shadow-[0_0_15px_rgba(138,43,226,0.15)]"
+                        : "border-purple-950/40 bg-[#0A0A0F]/80 hover:bg-[#111118]"
+                    }`}
+                  >
+                    <div className="flex justify-between items-center mb-1">
+                      <strong className="text-sm font-black text-white">{pack.name}</strong>
+                      <span className="text-xs font-black text-emerald-400">R$ {pack.price}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 font-medium leading-normal mb-1">{pack.desc}</p>
+                    <span className="text-[10px] text-[#D946EF] font-mono font-bold mt-2 flex items-center gap-1">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>{pack.messages} Créditos de IA</span>
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
 
-                {/* Submit button */}
+            {/* Method check list */}
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Selecione o Meio de Pagamento Seguro</label>
+              <div className="grid grid-cols-3 gap-3">
                 <button
-                  type="submit"
-                  disabled={isProcessing}
-                  className="w-full bg-[#8B2EFF] text-white font-extrabold py-3.5 rounded-2xl text-xs active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-md hover:bg-[#7824E3]"
+                  type="button"
+                  onClick={() => setPaymentMethod("pix")}
+                  className={`py-3.5 rounded-xl border font-bold text-xs transition-all cursor-pointer ${
+                    paymentMethod === "pix"
+                      ? "bg-[#8A2BE2] border-[#B026FF] text-white"
+                      : "bg-[#0a0a0f] border-purple-950 text-slate-400 hover:text-white"
+                  }`}
                 >
-                  {isProcessing ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Processando Pagamento Asaas...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Coins className="w-4 h-4 text-amber-300 animate-pulse" />
-                      <span>Comprar {currentPack.credits} Créditos agora por R$ {currentPack.price},00</span>
-                    </>
-                  )}
+                  Pix Instantâneo
                 </button>
-
-                {paymentSuccess && (
-                  <div className="bg-emerald-50 Border border-emerald-200 text-emerald-800 p-4 rounded-2xl text-xs flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
-                    <span>Pagamento simulado com êxito! <strong>{currentPack.credits} créditos</strong> foram creditados no seu saldo.</span>
-                  </div>
-                )}
-              </form>
-            )}
-          </div>
-        </div>
-
-        {/* SIDE BAR ACTIVE DETAILS */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className={`p-6 rounded-3xl border ${themeMode === "light" ? "bg-white border-slate-200" : "bg-[#1C1C26] border-[#2B2B3A]"} shadow-sm text-left`}>
-            <h3 className={`font-extrabold text-base mb-1 ${themeMode === "light" ? "text-slate-800" : "text-white"}`}>Garantias de Serviço</h3>
-            <p className="text-xs text-slate-500 leading-normal mb-4">
-              Cada transação financeira do AdsHive Prospect é validada através do ambiente de Sandbox e de produção do gateway de pagamentos parceiro <strong>Asaas</strong>, gerando credenciais seguras de criptografia SSL.
-            </p>
-            
-            <div className="space-y-3.5 text-xs text-slate-600 dark:text-[#B0B3C1]">
-              <div className="flex items-start gap-2.5">
-                <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                <span>Cobrança por Pix em tempo real com QR code imediato.</span>
-              </div>
-              <div className="flex items-start gap-2.5">
-                <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                <span>Liberação instantânea dos créditos de captação de leads.</span>
-              </div>
-              <div className="flex items-start gap-2.5">
-                <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                <span>Segurança e estorno garantidos caso ocorra lentidão na API.</span>
-              </div>
-              <div className="flex items-start gap-2.5">
-                <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                <span>Suporte 24/7 direto na plataforma ou via e-mail corporativo.</span>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("card")}
+                  className={`py-3.5 rounded-xl border font-bold text-xs transition-all cursor-pointer ${
+                    paymentMethod === "card"
+                      ? "bg-[#8A2BE2] border-[#B026FF] text-white"
+                      : "bg-[#0a0a0f] border-purple-950 text-slate-400 hover:text-white"
+                  }`}
+                >
+                  Cartão de Crédito
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod("boleto")}
+                  className={`py-3.5 rounded-xl border font-bold text-xs transition-all cursor-pointer ${
+                    paymentMethod === "boleto"
+                      ? "bg-[#8A2BE2] border-[#B026FF] text-white"
+                      : "bg-[#0a0a0f] border-purple-950 text-slate-400 hover:text-white"
+                  }`}
+                >
+                  Boleto Bancário
+                </button>
               </div>
             </div>
+
+            {/* Credit Card inputs */}
+            {paymentMethod === "card" && (
+              <div className="p-4 bg-slate-950 rounded-2xl border border-purple-950/80 space-y-3.5">
+                <span className="text-[10px] font-extrabold text-[#D946EF] block tracking-wider uppercase">Criptografia SSL de Cartão ativa via Asaas API</span>
+                <div className="grid grid-cols-2 gap-3.5">
+                  <div className="col-span-2">
+                    <input 
+                      type="text" 
+                      placeholder="Número do Cartão de Crédito"
+                      value={cardNumber}
+                      onChange={(e) => setCardNumber(e.target.value)}
+                      className="w-full bg-[#151520] border border-purple-950 rounded-xl px-3.5 py-2.5 text-xs font-mono outline-none text-white focus:border-[#B026FF]" 
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <input 
+                      type="text" 
+                      placeholder="Nome Gravado no Cartão"
+                      value={cardName}
+                      onChange={(e) => setCardName(e.target.value)}
+                      className="w-full bg-[#151520] border border-purple-950 rounded-xl px-3.5 py-2.5 text-xs font-semibold outline-none text-white focus:border-[#B026FF]" 
+                    />
+                  </div>
+                  <div>
+                    <input 
+                      type="text" 
+                      placeholder="Mês/Ano Exp (MM/AA)"
+                      value={cardExpiry}
+                      onChange={(e) => setCardExpiry(e.target.value)}
+                      className="w-full bg-[#151520] border border-purple-950 rounded-xl px-3.5 py-2.5 text-xs font-semibold outline-none text-white focus:border-[#B026FF]" 
+                    />
+                  </div>
+                  <div>
+                    <input 
+                      type="text" 
+                      placeholder="CVV / CVC Código"
+                      value={cardCvv}
+                      onChange={(e) => setCardCvv(e.target.value)}
+                      className="w-full bg-[#151520] border border-purple-950 rounded-xl px-3.5 py-2.5 text-xs font-mono outline-none text-white focus:border-[#B026FF]" 
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Trigger checkout modal button */}
+            <button
+              type="submit"
+              disabled={isProcessing}
+              className="w-full bg-gradient-to-r from-[#8A2BE2] to-[#B026FF] hover:shadow-[0_0_20px_rgba(176,38,255,0.5)] text-white font-extrabold py-4 rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer border-none transition-all"
+            >
+              {isProcessing ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Conectando com o servidor Asaas...</span>
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="w-4.5 h-4.5" />
+                  <span>Abastecer {selectedPack.name} agora (R$ {selectedPack.price},00)</span>
+                </>
+              )}
+            </button>
+          </form>
+        </div>
+
+        {/* Consumption Report "EXTRATO DE CONSUMO" (Col 4) */}
+        <div className="lg:col-span-4 bg-[#151520] border border-purple-950 rounded-3xl p-6 shadow-xl text-left relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-[#D946EF]/5 via-transparent to-transparent pointer-events-none"></div>
+          <div>
+            <h3 className="text-base font-black text-white flex items-center gap-1.5">
+              <Activity className="w-5 h-5 text-[#D946EF]" />
+              <span>Extrato de Consumo</span>
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">SDR Analytics • Últimos 30 dias de processamento comercial do usuário.</p>
+          </div>
+
+          <div className="mt-6 space-y-4">
+            <div className="p-4 rounded-2xl bg-[#0a0a0f] border border-purple-950 flex justify-between items-center">
+              <div>
+                <span className="text-slate-450 text-[10px] block uppercase font-bold">Leads Consumidos</span>
+                <span className="text-base font-extrabold text-indigo-400 font-mono mt-1 block">320 capturas</span>
+              </div>
+              <div className="text-[11px] text-indigo-300 font-bold bg-[#8A2BE2]/15 px-2 py-1 rounded">Normal</div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-[#0a0a0f] border border-purple-950 flex justify-between items-center">
+              <div>
+                <span className="text-slate-450 text-[10px] block uppercase font-bold">Mensagens IA SDR</span>
+                <span className="text-base font-extrabold text-[#D946EF] font-mono mt-1 block">{aiUsage.messagesUsed} envios</span>
+              </div>
+              <div className="text-[11px] text-[#D946EF] font-bold bg-[#D946EF]/15 px-2 py-1 rounded">Dentro da Cota</div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-[#0a0a0f] border border-purple-950 flex justify-between items-center">
+              <div>
+                <span className="text-slate-450 text-[10px] block uppercase font-bold">Pesquisas Realizadas</span>
+                <span className="text-base font-extrabold text-amber-500 font-mono mt-1 block">154 mapas</span>
+              </div>
+              <div className="text-[11px] text-amber-500 font-bold bg-amber-500/15 px-2 py-1 rounded">Excelente</div>
+            </div>
+          </div>
+
+          {/* Graphical evolution chart of usage in 30 days */}
+          <div className="h-44 w-full mt-6 text-[10px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={consumptionStats} margin={{ top: 5, right: 5, left: -25, bottom: 5 }}>
+                <defs>
+                  <linearGradient id="consumoLeads" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#8A2BE2" stopOpacity={0.4}/>
+                    <stop offset="95%" stopColor="#8A2BE2" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#221133" opacity={0.3} />
+                <XAxis dataKey="date" stroke="#6b7280" />
+                <YAxis stroke="#6b7280" />
+                <Tooltip contentStyle={{ backgroundColor: '#151520', borderColor: '#3b0066', color: '#ffffff' }} />
+                <Area type="monotone" dataKey="leads" name="Leads Capturados" stroke="#B026FF" fillOpacity={1} fill="url(#consumoLeads)" strokeWidth={2} />
+              </AreaChart>
+            </ResponsiveContainer>
           </div>
         </div>
+
       </div>
 
-      {/* HISTÓRICO FINANCEIRO */}
-      <div className={`p-6 rounded-3xl border ${themeMode === "light" ? "bg-white border-slate-200" : "bg-[#1C1C26] border-[#2B2B3A]"} shadow-sm text-left`}>
-        <div className="flex justify-between items-center mb-6">
+      {/* HISTÓRICO DE PAGAMENTOS TABLE - Loaded as requested from payments collection */}
+      <div className="bg-[#151520] border border-purple-950 rounded-3xl p-6 shadow-xl relative text-left">
+        <div className="flex justify-between items-center mb-5 pb-4 border-b border-purple-950/60">
           <div>
-            <h3 className={`text-lg font-extrabold ${themeMode === "light" ? "text-slate-900" : "text-white"}`}>Histórico Financeiro</h3>
-            <p className="text-xs text-slate-500">Consulte abaixo as faturas emitidas e comprovantes fiscais.</p>
+            <h3 className="text-lg font-black text-white flex items-center gap-2">
+              <FileText className="w-5 h-5 text-indigo-400" />
+              <span>Histórico de Pagamentos</span>
+            </h3>
+            <p className="text-xs text-slate-400">Consulte faturas, métodos de cobrança e faça download oficial dos comprovantes fiscais.</p>
           </div>
           <button 
+            type="button"
             onClick={loadFinancialData}
-            className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all text-slate-500"
+            className="p-2 bg-slate-900 border border-slate-800 text-slate-450 hover:text-white rounded-xl transition-all cursor-pointer"
           >
             <RefreshCw className="w-4 h-4" />
           </button>
         </div>
 
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-12 gap-2 text-slate-500">
-            <RefreshCw className="w-8 h-8 animate-spin text-[#8B2EFF]" />
-            <span className="text-xs font-semibold">Carregando livro caixa do usuário...</span>
+          <div className="flex flex-col items-center justify-center py-16 gap-3 text-slate-450">
+            <RefreshCw className="w-8 h-8 animate-spin text-[#8A2BE2]" />
+            <span className="text-xs font-bold">Buscando lançamentos no banco Asaas...</span>
           </div>
         ) : payments.length === 0 ? (
-          <div className="text-center py-12 border-2 border-dashed rounded-2xl border-slate-200 dark:border-slate-800">
-            <Coins className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-            <h4 className="font-bold text-sm">Nenhuma transação encontrada</h4>
-            <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">Sua conta ainda não efetuou pagamentos avulsos ou de mensalidades.</p>
+          <div className="text-center py-14 border border-dashed border-purple-950/50 rounded-2xl bg-[#0a0a0f]">
+            <Coins className="w-10 h-10 text-slate-650 mx-auto mb-3 opacity-60" />
+            <h4 className="font-extrabold text-sm text-slate-350">Nenhum pagamento registrado</h4>
+            <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">Esta conta não realizou pagamentos de planos de faturamento ou recargas avulsas.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left font-sans">
+            <table className="w-full text-left">
               <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-800 text-[10px] text-slate-400 tracking-wider uppercase font-black">
+                <tr className="border-b border-purple-950 text-[10px] text-slate-400 tracking-wider uppercase font-black">
                   <th className="py-3 px-4">DATA</th>
                   <th className="py-3 px-4">DESCRIÇÃO</th>
-                  <th className="py-3 px-4">VALOR</th>
-                  <th className="py-3 px-4">MÉTODO</th>
+                  <th className="py-3 px-4">PLANO ATIVO</th>
+                  <th className="py-3 px-4">MÉTODO COBRANDO</th>
+                  <th className="py-3 px-4">VALOR QUITANDO</th>
                   <th className="py-3 px-4">STATUS</th>
-                  <th className="py-3 px-4 text-right">AÇÕES</th>
+                  <th className="py-3 px-4 text-right">COMPROVANTE</th>
                 </tr>
               </thead>
-              <tbody className="text-xs divide-y divide-slate-100 dark:divide-slate-800">
-                {payments.map((pay) => (
-                  <tr key={pay.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/10">
-                    <td className="py-3.5 px-4 font-mono font-medium">
-                      {pay.date ? new Date(pay.date).toLocaleDateString() : "-"}
+              <tbody className="text-xs divide-y divide-[#221133]/40">
+                {payments.map(pay => (
+                  <tr key={pay.id} className="hover:bg-[#8A2BE2]/5 transition-colors">
+                    <td className="py-3.5 px-4 font-mono font-bold text-slate-300">
+                      {pay.date ? new Date(pay.date).toLocaleDateString("pt-BR") : "08/06/2026"}
                     </td>
-                    <td className="py-3.5 px-4 font-bold">
-                      {(pay.amount || 0) <= 20 ? "Pacote de Prospecção Slim" :
-                       (pay.amount || 0) <= 100 ? "Créditos Avulsos de Leads" : "Assinatura Pro Mensal AdsHive"}
-                    </td>
-                    <td className="py-3.5 px-4 font-extrabold text-emerald-500">
-                      R$ {(pay.amount || 0).toFixed(2)}
-                    </td>
-                    <td className="py-3.5 px-4 font-semibold uppercase">
-                      {pay.method || "PIX"}
+                    <td className="py-3.5 px-4 font-extrabold text-white">
+                      {pay.description || (pay.amount <= 10 ? "Pacote de IA Slim" : pay.amount <= 40 ? "Pacote IA Premium" : `Abono de faturamento ${planName}`)}
                     </td>
                     <td className="py-3.5 px-4">
-                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                        pay.status === "RECEIVED" || pay.status === "CONFIRMED"
-                          ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400"
-                          : pay.status === "PENDING"
-                            ? "bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400"
-                            : "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400"
-                      }`}>
-                        {pay.status === "RECEIVED" || pay.status === "CONFIRMED" ? "Concluído" :
-                         pay.status === "PENDING" ? "Processando" : "Cancelado"}
+                      <span className="text-indigo-300 bg-indigo-950/20 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
+                        {planName}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4 font-bold text-slate-400 uppercase">
+                      {pay.method || "PIX"}
+                    </td>
+                    <td className="py-3.5 px-4 font-black text-emerald-400 font-mono">
+                      R$ {pay.amount.toFixed(2)}
+                    </td>
+                    <td className="py-3.5 px-4">
+                      <span className="bg-emerald-950/30 text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest">
+                        PAGO
                       </span>
                     </td>
                     <td className="py-3.5 px-4 text-right">
-                      <button 
-                        onClick={() => handleDownloadInvoice(pay)}
-                        className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/20 rounded-xl transition-all"
-                        title="Baixar Comprovante"
+                      <button
+                        onClick={() => handleDownloadProof(pay)}
+                        title="Descarregar comprovante fiscal"
+                        className="p-2 hover:bg-slate-900 text-slate-400 hover:text-[#D946EF] rounded-xl transition-all cursor-pointer border-none"
                       >
                         <Download className="w-4 h-4" />
                       </button>
@@ -744,145 +1012,246 @@ Agradecemos sua colaboração com nossa rede de negócios!
         )}
       </div>
 
-      {/* ASAAS SECURE CREDITS CHECKOUT OVERLAY MODAL */}
-      {pendingCreditsPack && (
-        <div id="modal-credits-asaas-checkout" className="fixed inset-0 bg-slate-950/75 backdrop-blur-sm z-[150] flex items-center justify-center p-4 animate-in fade-in duration-200 text-left">
-          <div className="bg-white text-slate-800 rounded-3xl w-full max-w-md border border-slate-200 shadow-2xl overflow-hidden flex flex-col">
+      {/* CHECKOUT MODAL WINDOW COMPONENT */}
+      {activePendingPack && (
+        <div id="modal-credits-asaas-checkout" className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[1200] flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200 text-left">
+          <div className="bg-[#111116] text-white rounded-3xl w-full max-w-md border border-purple-950 shadow-2xl overflow-hidden flex flex-col my-auto">
             
             {/* Header */}
-            <div className="bg-slate-900 text-white p-5 flex justify-between items-center relative">
+            <div className="bg-purple-950 p-5 flex justify-between items-center border-b border-purple-900">
               <div>
-                <span className="bg-blue-500/20 text-blue-400 text-[8px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider block w-max mb-1">
-                  ASAAS SECURE CREDITS CHECKOUT
+                <span className="bg-[#8A2BE2]/20 border border-[#B026FF]/30 text-white text-[8px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-widest mb-1.5 block w-max animate-pulse">
+                  Asaas API v1.6 Core Secure Gateway
                 </span>
-                <h4 className="font-black text-sm tracking-tight text-white flex items-center gap-1.5 font-sans">
-                  <span>Adquirir {pendingCreditsPack.credits} Créditos</span>
-                </h4>
+                <strong className="text-white text-base font-black tracking-tight block">
+                  Carga Segura de {activePendingPack.name}
+                </strong>
               </div>
-              <span className="font-black text-white text-base font-mono shrink-0">R$ {pendingCreditsPack.price},00</span>
-              
-              <button 
-                onClick={() => {
-                  setPendingCreditsPack(null);
-                  setPixCodeGenerated(null);
-                  setPixQrUrl(null);
-                }}
-                className="absolute top-4 right-4 bg-white/10 hover:bg-white/20 text-white p-1 rounded-full text-xs transition-colors border-none cursor-pointer"
-              >
-                ✕
-              </button>
+              <span className="font-extrabold text-emerald-400 text-lg font-mono">R$ {activePendingPack.price},00</span>
             </div>
 
             {/* Body */}
             <div className="p-6 space-y-4">
-              
-              {isProcessing ? (
-                <div className="py-12 flex flex-col items-center justify-center text-center space-y-3">
-                  <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-                  <strong className="text-sm font-black text-slate-900">Validando transação com banco emissor...</strong>
-                  <p className="text-xs text-slate-400 font-semibold leading-normal">
-                    Reabastecendo saldo com a API segura do Sandbox Asaas.
-                  </p>
-                </div>
-              ) : pixCodeGenerated ? (
+              {pixCode ? (
                 <div className="space-y-4 text-center">
-                  <div className="bg-slate-50 p-4 rounded-2xl flex flex-col items-center justify-center border border-slate-200/80">
-                    <div className="w-32 h-32 bg-white border p-2 rounded-xl flex items-center justify-center">
-                      <img src={pixQrUrl || ""} alt="Pix Qr Code" className="w-[120px] h-[120px]" referrerPolicy="no-referrer" />
-                    </div>
-                    <span className="text-[10px] text-slate-400 mt-2 font-black uppercase tracking-wider">Escaneie o QR Code Asaas acima</span>
+                  <div className="bg-white p-4 rounded-2xl inline-block border border-slate-200">
+                    <img src={pixQr || ""} alt="Pix seguro Asaas QR" className="w-[180px] h-[180px] mx-auto" referrerPolicy="no-referrer" />
+                    <span className="text-[10px] text-slate-800 mt-2 font-black uppercase tracking-wider block">Escaneie com seu aplicativo bancário</span>
                   </div>
 
-                  <div className="space-y-1 text-xs text-left">
-                    <strong className="text-[10px] text-slate-400 block uppercase font-black tracking-wider">Chave Copia e Cola Pix</strong>
-                    <div className="flex gap-1.5">
+                  <div className="text-left space-y-1">
+                    <span className="text-[9px] uppercase tracking-wider font-extrabold text-[#D946EF]">Copia e Cola Pix Key</span>
+                    <div className="flex gap-2">
                       <input 
                         type="text" 
-                        readOnly 
-                        value={pixCodeGenerated}
-                        className="flex-1 border border-slate-200 p-2.5 rounded-xl text-[9px] font-mono text-slate-550 bg-slate-50 focus:outline-none"
+                        readOnly
+                        value={pixCode}
+                        className="flex-1 bg-slate-950 border border-purple-950 rounded-xl p-2.5 text-[9px] font-mono select-all text-[#B026FF] focus:outline-none"
                       />
-                      <button 
+                      <button
                         type="button"
                         onClick={() => {
-                          navigator.clipboard.writeText(pixCodeGenerated);
-                          triggerNotification("Chave PIX copiada!", "success");
+                          navigator.clipboard.writeText(pixCode);
+                          triggerNotification("Chave Pix copiada com sucesso!", "success");
                         }}
-                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-xl border-none cursor-pointer text-xs font-bold"
+                        className="bg-[#8A2BE2] hover:bg-[#B026FF] text-white px-3.5 py-2.5 rounded-xl text-xs font-black shrink-0 cursor-pointer border-none"
                       >
                         Copiar
                       </button>
                     </div>
                   </div>
 
-                  {/* Webhook checking logs for Pix */}
-                  <div className="bg-slate-950 p-3 h-[72px] rounded-xl font-mono text-[9px] text-[#A5B4FC] space-y-1 text-left relative flex flex-col justify-center">
-                    <span className="absolute top-2 right-2 text-[7px] bg-indigo-500/10 border border-indigo-400/20 px-1.5 py-0.5 rounded text-[#818CF8] animate-pulse uppercase">Asaas Server Log</span>
-                    <p className="opacity-40">● [asaas] Webhook status: WAITING_RECEIPT</p>
-                    <p className="text-white animate-pulse">
-                      ● [Central-Pix] Sincronização em tempo real: {secondsLeft > 0 ? `Buscando pagamento... auto-conclui em ${secondsLeft}s` : "Compensado!"}
+                  {/* Log console simulated area inside modal as required */}
+                  <div className="bg-slate-950 p-3.5 rounded-xl border border-purple-950 text-left font-mono text-[9px] space-y-1 text-slate-400">
+                    <p className="text-slate-500">● [Asaas Server] Estabelecendo conexão TLS v1.3...</p>
+                    <p className="text-[#D946EF] animate-pulse">
+                      ● [Webhook-Pix] Ouvindo recebimento do Banco Central: {secondsLeft > 0 ? `Compensação automática em ${secondsLeft}s` : "Compensado!"}
                     </p>
                   </div>
 
-                  <button 
+                  <button
                     type="button"
-                    onClick={handleConfirmCreditsPaymentSimulated}
-                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-3.5 rounded-2xl text-xs flex items-center justify-center gap-1 border-none cursor-pointer active:scale-95 transition-all shadow-sm"
+                    onClick={handleAutoCompensateSimulatedPayment}
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 py-3.5 rounded-xl text-white font-extrabold text-xs cursor-pointer border-none transition-all shadow-md"
                   >
-                    <span>Simular Pagamento Compensado Agora</span>
+                    Simular Compensação Instantânea Asaas
                   </button>
                 </div>
               ) : paymentMethod === "boleto" ? (
-                <div className="py-4 space-y-4 text-center">
-                  <div className="bg-slate-50 p-4 rounded-xl border flex flex-col items-center justify-center text-slate-600 gap-1.5">
-                    <span className="text-xl font-mono tracking-widest font-bold">||||| | ||||| || |||||| | |||</span>
-                    <span className="text-[9px] font-mono text-slate-400">Linha digitável: 34191.79001 01043.513184 91020.150008 7 940300000{pendingCreditsPack.price}</span>
+                <div className="space-y-4 text-center">
+                  <div className="p-5 rounded-2xl bg-slate-950 border border-purple-950 text-center font-mono">
+                    <span className="text-2xl tracking-widest text-[#B026FF] block opacity-85">||||| | ||||| | ||| |||||| | ||||| |</span>
+                    <span className="text-[9px] text-slate-500 mt-2 block">
+                      Linha Digitável: 34191.79001 01043.513184 91020.150008 7 940300000{activePendingPack.price}00
+                    </span>
                   </div>
-                  <p className="text-slate-500 text-xs font-semibold">Boleto registrado pelo gateway Asaas. Deseja realizar a compensação?</p>
 
-                  {/* Webhook checking logs for Boleto */}
-                  <div className="bg-slate-950 p-3 h-[72px] rounded-xl font-mono text-[9px] text-[#A5B4FC] space-y-1 text-left relative flex flex-col justify-center">
-                    <span className="absolute top-2 right-2 text-[7px] bg-indigo-500/10 border border-indigo-400/20 px-1.5 py-0.5 rounded text-[#818CF8] animate-pulse uppercase">Asaas Server Log</span>
-                    <p className="opacity-40">● [asaas] Webhook status: WAITING_RECEIPT</p>
-                    <p className="text-white animate-pulse">
-                      ● [Central-Slips] Verificação bancária: {secondsLeft > 0 ? `Aguardando compensação... auto-paga em ${secondsLeft}s` : "Compensado!"}
+                  {/* Log console simulated area inside modal as required */}
+                  <div className="bg-slate-950 p-3.5 rounded-xl border border-purple-950 text-left font-mono text-[9px] space-y-1 text-slate-400">
+                    <p className="text-[#D946EF] animate-pulse">
+                      ● [Webhook-Boleto] Aguardando compensação bancária: {secondsLeft > 0 ? `Simulando em ${secondsLeft}s...` : "Compensado!"}
                     </p>
                   </div>
 
-                  <button 
+                  <button
                     type="button"
-                    onClick={handleConfirmCreditsPaymentSimulated}
-                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold py-3.5 rounded-2xl text-xs border-none cursor-pointer active:scale-95 transition-all"
+                    onClick={handleAutoCompensateSimulatedPayment}
+                    className="w-full bg-[#8A2BE2] hover:bg-[#B026FF] py-3.5 rounded-xl text-white font-extrabold text-xs cursor-pointer border-none transition-all"
                   >
-                    <span>Simular Compensação do Boleto Agora</span>
+                    Simular Compensação do Boleto Agora
                   </button>
                 </div>
               ) : (
-                <div className="py-4 space-y-4 text-center col-span-2">
-                  <div className="bg-emerald-50 text-emerald-800 p-4 rounded-2xl text-xs flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0 animate-bounce" />
-                    <span>Seus dados do Cartão de Crédito <strong>Final {cardNumber.slice(-4) || "4242"}</strong> foram pré-aprovados pela adquirente Asaas.</span>
+                <div className="space-y-4">
+                  <div className="bg-[#8A2BE2]/10 border border-[#8A2BE2]/30 p-4 rounded-xl text-xs text-[#D946EF] flex items-center gap-2">
+                    <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
+                    <span>Dados do Cartão (Titular: {cardName || "DOUGLAS BATERIA"}) aceitos em Sandbox Asaas.</span>
                   </div>
 
-                  {/* Webhook checking logs for Card */}
-                  <div className="bg-slate-950 p-3 h-[72px] rounded-xl font-mono text-[9px] text-[#A5B4FC] space-y-1 text-left relative flex flex-col justify-center">
-                    <span className="absolute top-2 right-2 text-[7px] bg-indigo-500/10 border border-indigo-400/20 px-1.5 py-0.5 rounded text-[#818CF8] animate-pulse uppercase">Asaas Server Log</span>
-                    <p className="opacity-40">● [asaas] Webhook status: WAITING_CAPT_EXEC</p>
-                    <p className="text-white animate-pulse">
-                      ● [Central-Acq] Capturando cobrança via adquirente: {secondsLeft > 0 ? `Processando cartão... auto-paga em ${secondsLeft}s` : "Capturado!"}
+                  {/* Log console simulated area inside modal as required */}
+                  <div className="bg-slate-950 p-3.5 rounded-xl border border-purple-950 text-left font-mono text-[9px] space-y-1 text-slate-400">
+                    <p className="text-[#D946EF] animate-pulse">
+                      ● [Webhook-Cartao] Capturando limite com banco em emissor: {secondsLeft > 0 ? `Confirmando em ${secondsLeft}s...` : "Compensado!"}
                     </p>
                   </div>
 
-                  <button 
+                  <button
                     type="button"
-                    onClick={handleConfirmCreditsPaymentSimulated}
-                    className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold py-3.5 rounded-2xl text-xs border-none cursor-pointer active:scale-95 transition-all"
+                    onClick={handleAutoCompensateSimulatedPayment}
+                    className="w-full bg-[#8A2BE2] hover:bg-[#B026FF] py-3.5 rounded-xl text-white font-extrabold text-xs cursor-pointer border-none transition-all hover:shadow-[0_0_15px_rgba(138,43,226,0.3)]"
                   >
-                    <span>Confirmar Cobrança Cartão Agora</span>
+                    Capturar Cobrança no Cartão de Crédito
                   </button>
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* OTHER ACTION GENERAL MODALS (CANCEL, UPDATE CARD, CHANGE PLAN) */}
+      {activeActionModal && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-[1100] flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200 text-left">
+          <div className="bg-[#111116] border border-purple-950 text-white rounded-3xl w-full max-w-md p-6 relative flex flex-col my-auto shadow-2xl">
+            
+            <button 
+              type="button"
+              onClick={() => setActiveActionModal(null)}
+              className="absolute top-4 right-4 bg-slate-900 hover:bg-slate-800 text-slate-400 p-1.5 rounded-full cursor-pointer"
+            >
+              <X className="w-4.5 h-4.5" />
+            </button>
+
+            {/* Cancel Suscription Flow */}
+            {activeActionModal === "cancel" && (
+              <div className="space-y-4">
+                <div className="bg-red-500/10 text-red-400 border border-red-500/20 p-3 rounded-xl flex items-center gap-2">
+                  <ShieldAlert className="w-5 h-5" />
+                  <span className="font-extrabold text-xs">Exclusão de Assinatura Recorrente</span>
+                </div>
+                <h3 className="text-lg font-black">Tem certeza que deseja cancelar?</h3>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Ao cancelar sua assinatura no AdsHive Prospect, as consultas de SDR, pesquisas avançadas no Maps e acesso ao CRM serão suspensos imediatamente. Suas faturas futuras no Asaas serão descartadas com êxito.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => handleGeneralAction("cancel")}
+                  className="w-full bg-red-650 hover:bg-red-500 font-extrabold text-xs py-3.5 rounded-xl text-white border-none cursor-pointer transition-all mt-2"
+                >
+                  Confirmar Cancelamento no Asaas
+                </button>
+              </div>
+            )}
+
+            {/* Change SaaS Plan Flow */}
+            {activeActionModal === "change_plan" && (
+              <div className="space-y-4">
+                <div className="bg-[#8A2BE2]/10 text-[#D946EF] border border-[#8A2BE2]/20 p-3 rounded-xl flex items-center gap-2">
+                  <ArrowRight className="w-5 h-5 animate-pulse" />
+                  <span className="font-extrabold text-xs">Atualização Contratual do Plano</span>
+                </div>
+                <h3 className="text-lg font-black">Selecionar Novo Plano Comercial</h3>
+                <p className="text-xs text-slate-400">Inscreva-se em um plano de maior volume para prospecção em larga escala de leads qualificados do Maps.</p>
+                
+                <div className="space-y-2 mt-2">
+                  {[
+                    { id: "starter", name: "Starter - R$ 49,00/mês", cap: "1.000 Leads/mês" },
+                    { id: "pro", name: "Pro - R$ 97,00/mês", cap: "5.000 Leads/mês" },
+                    { id: "agency", name: "Agência - R$ 197,00/mês", cap: "15.000 Leads/mês" },
+                    { id: "enterprise", name: "Enterprise - R$ 497,00/mês", cap: "Luz Verde Ilimitada" }
+                  ].map(planOption => (
+                    <div 
+                      key={planOption.id}
+                      onClick={() => setNewSelectedPlanName(planOption.id)}
+                      className={`p-3.5 rounded-xl border cursor-pointer transition-all flex justify-between items-center ${
+                        newSelectedPlanName === planOption.id 
+                          ? "bg-[#8A2BE2]/25 border-[#B026FF] text-white" 
+                          : "bg-slate-950 border-purple-950 text-slate-400 hover:text-slate-200"
+                      }`}
+                    >
+                      <div>
+                        <span className="text-xs font-black block">{planOption.name}</span>
+                        <span className="text-[10px] opacity-75">{planOption.cap}</span>
+                      </div>
+                      {newSelectedPlanName === planOption.id && <CheckCircle className="w-5 h-5 text-emerald-400" />}
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleGeneralAction("change_plan")}
+                  className="w-full bg-[#8A2BE2] hover:bg-[#B026FF] font-extrabold text-xs py-3.5 rounded-xl text-white border-none cursor-pointer transition-all mt-2"
+                >
+                  Concluir Upgrade no Asaas (Simulado)
+                </button>
+              </div>
+            )}
+
+            {/* Update Credit Card Flow */}
+            {activeActionModal === "update_card" && (
+              <div className="space-y-4">
+                <div className="bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 p-3 rounded-xl flex items-center gap-2">
+                  <CreditCard className="w-5 h-5" />
+                  <span className="font-extrabold text-xs">Atualização Bancária Seguro</span>
+                </div>
+                <h3 className="text-lg font-black">Nova Forma de Pagamento</h3>
+                <p className="text-xs text-slate-400">Cadastre um novo cartão de crédito seguro para faturamentos automáticos subsequentes.</p>
+                
+                <div className="space-y-3 mt-2">
+                  <input 
+                    type="text" 
+                    placeholder="Número do Cartão" 
+                    className="w-full bg-slate-950 border border-purple-950 rounded-xl px-3.5 py-2.5 text-xs font-mono outline-none text-white focus:border-[#B026FF]" 
+                  />
+                  <input 
+                    type="text" 
+                    placeholder="Nome Impresso" 
+                    className="w-full bg-slate-950 border border-purple-950 rounded-xl px-3.5 py-2.5 text-xs outline-none text-white focus:border-[#B026FF]" 
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input 
+                      type="text" 
+                      placeholder="Validade (MM/AA)" 
+                      className="w-full bg-slate-950 border border-purple-950 rounded-xl px-3.5 py-2.5 text-xs font-mono outline-none text-white focus:border-[#B026FF]" 
+                    />
+                    <input 
+                      type="text" 
+                      placeholder="CVC/CVV" 
+                      className="w-full bg-slate-950 border border-purple-950 rounded-xl px-3.5 py-2.5 text-xs font-mono outline-none text-white focus:border-[#B026FF]" 
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleGeneralAction("update_card")}
+                  className="w-full bg-[#8A2BE2] hover:bg-[#B026FF] font-extrabold text-xs py-3.5 rounded-xl text-white border-none cursor-pointer transition-all mt-2"
+                >
+                  Confirmar Atualização de Forma
+                </button>
+              </div>
+            )}
 
           </div>
         </div>
