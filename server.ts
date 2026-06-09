@@ -1020,8 +1020,85 @@ app.post("/api/leads/generate", async (req, res) => {
       };
     });
 
-    console.log(`[Google Maps API] Processed and returned ${realLeads.length} genuine leads.`);
-    return res.json({ leads: realLeads });
+    // AI optimization and prioritization
+    const ai = getGeminiClient();
+    let finalLeads = realLeads;
+
+    if (ai) {
+      try {
+        console.log(`[Google Gemini] Analyzing and prioritizing "${resolvedNiche}" companies in "${resolvedLocation}"...`);
+        const companyListSummary = realLeads.map((l: any, i: number) => {
+          return `${i + 1}. Nome: "${l.name}" | Site: ${l.hasWebsite ? 'Sim' : 'Não'} | Avaliação: ${l.rating || 0} | Reviews: ${l.reviews || 0} | Fone: ${l.phone || 'Sem'}`;
+        }).join("\n");
+
+        const promptTemplate = `Você é um Analista de Inteligência Comercial e SDR B2B Sênior. Abaixo está uma lista de empresas reais encontradas no Google Maps sob o nicho de "${resolvedNiche}" na região de "${resolvedLocation}":
+
+${companyListSummary}
+
+Sua missão é classificar e PRIORIZAR as empresas de forma empresarial. Classifique-as para priorizar "Cadastros Empresariais" (PJ estabelecidas, LTDA, S/A, corporativas de médio e grande porte, clínicas consolidadas) frente a MEIs, informais ou serviços muito informais.
+
+Retorne no formato JSON com um único array de objetos sob a chave "optimizedLeads" obedecendo ao seguinte formato exato:
+{
+  "optimizedLeads": [
+    {
+      "index": 1,
+      "isCorporatePriority": true,
+      "corporateTag": "PJ Estabelecida",
+      "b2bRecommendation": "Oferecer funil de anúncios regional e reestruturação de site empresarial."
+    }
+  ]
+}
+Gere exatamente ${realLeads.length} correspondentes de 1 a ${realLeads.length}. Responda APENAS o JSON estruturado puro, sem explicações extras ou marcações de bloco.`;
+
+        const aiResponse = await generateContentWithRetry(ai, {
+          contents: promptTemplate,
+          config: {
+            temperature: 0.25,
+            responseMimeType: "application/json"
+          }
+        });
+
+        const textResponse = aiResponse.text?.trim() || "";
+        let cleanedJson = textResponse;
+        if (cleanedJson.includes("```")) {
+          cleanedJson = cleanedJson.replace(/```json/g, "").replace(/```/g, "").trim();
+        }
+
+        const parsed = JSON.parse(cleanedJson);
+        if (parsed && Array.isArray(parsed.optimizedLeads)) {
+          finalLeads = realLeads.map((lead: any, idx: number) => {
+            const opt = parsed.optimizedLeads.find((o: any) => o.index === idx + 1);
+            if (opt) {
+              const scoreBoost = opt.isCorporatePriority ? 15 : 0;
+              return {
+                ...lead,
+                isCorporatePriority: !!opt.isCorporatePriority,
+                corporateTag: opt.corporateTag || (lead.hasWebsite ? "PJ Estruturada" : "Negócio Local PJ"),
+                b2bRecommendation: opt.b2bRecommendation || "Otimização local de captação comercial.",
+                leadScore: Math.min(lead.leadScore + scoreBoost, 100),
+                gmbAnalysis: `${lead.gmbAnalysis} [Estratégia B2B]: ${opt.b2bRecommendation}`
+              };
+            }
+            return lead;
+          });
+
+          // Sort final leads so isCorporatePriority is true at the top! (forma prioritária!)
+          finalLeads.sort((a: any, b: any) => {
+            const aPriority = a.isCorporatePriority ? 1 : 0;
+            const bPriority = b.isCorporatePriority ? 1 : 0;
+            if (bPriority !== aPriority) {
+              return bPriority - aPriority;
+            }
+            return b.leadScore - a.leadScore;
+          });
+        }
+      } catch (geminiError: any) {
+        console.error("[Gemini Optimizer Error] Failed B2B prioritization:", geminiError);
+      }
+    }
+
+    console.log(`[Google Maps API] Processed and returned ${finalLeads.length} genuine leads.`);
+    return res.json({ leads: finalLeads });
 
   } catch (globalErr: any) {
     const errorMsg = globalErr?.message || String(globalErr);

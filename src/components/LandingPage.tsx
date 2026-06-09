@@ -646,7 +646,7 @@ A oferta de serviços de otimização comercial, criação de sites e tráfego p
             <a href="#como-funciona" className="hover:text-white transition-colors cursor-pointer">Como Funciona</a>
             <a href="#diferenciais" className="hover:text-white transition-colors cursor-pointer">Diferenciais</a>
             <a href="#leads-sem-site" className="hover:text-white transition-colors cursor-pointer">Sem Website</a>
-            <a href="#prints-da-plataforma" className="hover:text-white transition-colors cursor-pointer">Mockups</a>
+            <a href="#prints-da-plataforma" className="hover:text-white transition-colors cursor-pointer">Agende uma Reunião Empresarial!</a>
             <a href="#comparativo-planos" className="hover:text-white transition-colors cursor-pointer">Planos</a>
             <a href="#perguntas-frequentes" className="hover:text-white transition-colors cursor-pointer flex items-center gap-1">Dúvidas</a>
           </nav>
@@ -1209,13 +1209,13 @@ A oferta de serviços de otimização comercial, criação de sites e tráfego p
       <section id="prints-da-plataforma" className="py-20 max-w-7xl mx-auto px-4 text-center space-y-12">
         <div className="space-y-3 max-w-2xl mx-auto">
           <span className="bg-[#8B2DFF]/15 text-[#C026FF] border border-[#8B2DFF]/25 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest font-mono">
-            EXPERIÊNCIA INTERNA DO USUÁRIO
+            CADASTROS EXCLUSIVOS PJ & EMPRESARIAIS
           </span>
           <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-            Explore Por Dentro do Nosso Ecossistema
+            Agende uma Reunião Empresarial!
           </h2>
           <p className="text-[#A1A1AA] text-xs sm:text-sm">
-            Clique nas abas abaixo para simular as telas e funcionalidades chave que você acessará logo após criar seu cadastro grátis.
+            Recursos premium e simulações de painel liberados exclusivamente para cadastros empresariais estruturados (PJ). Visualize nossa inteligência de SDR abaixo.
           </p>
         </div>
 
@@ -1392,85 +1392,116 @@ A oferta de serviços de otimização comercial, criação de sites e tráfego p
         </div>
       </section>
 
-      {/* SEÇÃO "SEU CALENDLY INTEGRADO AO CRM" */}
+      {/* SEÇÃO "PÁGINA INICIAL PARA TESTE" */}
       <section id="calendly-integrado" className="py-20 bg-[#13131A]/35 border-y border-slate-950 px-4">
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
             
             {/* Left Block */}
             <div className="lg:col-span-6 space-y-6 text-left">
-              <span className="text-[10px] font-black text-[#C026FF] bg-[#8B2DFF]/15 px-3 py-1 rounded font-mono uppercase tracking-widest inline-block">Agendamento Simplificado</span>
-              <h2 className="text-3xl sm:text-4xl font-extrabold text-white leading-tight">Seu Calendly Integrado ao CRM</h2>
+              <span className="text-[10px] font-black text-[#C026FF] bg-[#8B2DFF]/15 px-3 py-1 rounded font-mono uppercase tracking-widest inline-block">Plataforma Interativa</span>
+              <h2 className="text-3xl sm:text-4xl font-extrabold text-white leading-tight">Página Inicial para Testes de Prospecção</h2>
               <p className="text-[#A1A1AA] text-xs sm:text-sm leading-relaxed font-semibold">
-                Compartilhe seu link personalizado de agendamento e permita que clientes marquem reuniões automaticamente.
+                Nossos cadastros são direcionados exclusivamente a empresas PJ estruturadas. Para que você possa validar todas as nossas ferramentas de inteligência, disponibilizamos uma simulação da nossa tela inicial com créditos fictícios de teste.
               </p>
 
               <div className="bg-[#0A0A0F] p-4 rounded-xl border border-slate-850 flex items-center justify-between font-sans">
                 <div className="flex items-center gap-2 font-mono text-xs sm:text-sm">
-                  <Link2 className="w-4 h-4 text-[#8B2DFF]" />
-                  <span className="text-slate-400">prospect.adshive.online/</span>
-                  <span className="text-white font-extrabold">seunome</span>
+                  <Play className="w-4 h-4 text-[#8B2DFF]" />
+                  <span className="text-slate-400">ambiente-sandbox.adshive.online/</span>
+                  <span className="text-white font-extrabold">test-drive-pj</span>
                 </div>
-                <span className="text-[9px] bg-indigo-500/10 text-indigo-400 font-bold px-2 py-0.5 rounded uppercase tracking-wider font-mono">Exemplo</span>
+                <span className="text-[9px] bg-emerald-500/10 text-emerald-400 font-bold px-2 py-0.5 rounded uppercase tracking-wider font-mono">Liberado</span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-2 text-xs text-slate-300 font-bold">
-                <div className="flex items-center gap-2 bg-[#13131A] p-2.5 rounded-lg border border-slate-900"><Check className="text-[#8B2DFF] w-4 h-4 shrink-0" /> Escolha automática de horários</div>
-                <div className="flex items-center gap-2 bg-[#13131A] p-2.5 rounded-lg border border-slate-900"><Check className="text-[#8B2DFF] w-4 h-4 shrink-0" /> Criação automática de reunião</div>
-                <div className="flex items-center gap-2 bg-[#13131A] p-2.5 rounded-lg border border-slate-900"><Check className="text-[#8B2DFF] w-4 h-4 shrink-0" /> Integração com CRM</div>
-                <div className="flex items-center gap-2 bg-[#13131A] p-2.5 rounded-lg border border-slate-900"><Check className="text-[#8B2DFF] w-4 h-4 shrink-0" /> Notificações automáticas</div>
-                <div className="flex items-center gap-2 bg-[#13131A] p-2.5 rounded-lg border border-slate-900 col-span-1 sm:col-span-2"><Check className="text-[#8B2DFF] w-4 h-4 shrink-0" /> Histórico completo</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-2 text-xs text-slate-350 font-bold">
+                <div className="flex items-center gap-2 bg-[#13131A] p-2.5 rounded-lg border border-slate-900"><Check className="text-[#8B2DFF] w-4 h-4 shrink-0" /> Simulador de Busca Ativo</div>
+                <div className="flex items-center gap-2 bg-[#13131A] p-2.5 rounded-lg border border-slate-900"><Check className="text-[#8B2DFF] w-4 h-4 shrink-0" /> Visualização de Extratos de Custos</div>
+                <div className="flex items-center gap-2 bg-[#13131A] p-2.5 rounded-lg border border-slate-900"><Check className="text-[#8B2DFF] w-4 h-4 shrink-0" /> Copiloto IA Liberado de Imediato</div>
+                <div className="flex items-center gap-2 bg-[#13131A] p-2.5 rounded-lg border border-slate-900"><Check className="text-[#8B2DFF] w-4 h-4 shrink-0" /> Exportações e CRM Ativos</div>
+                <div className="flex items-center gap-2 bg-[#13131A] p-2.5 rounded-lg border border-slate-900 col-span-1 sm:col-span-2"><Check className="text-[#8B2DFF] w-4 h-4 shrink-0" /> Dashboard Gerencial Completo</div>
               </div>
             </div>
 
             {/* Right Block */}
             <div className="lg:col-span-6 relative">
               <div className="absolute -inset-1 rounded-3xl bg-gradient-to-r from-[#8B2DFF] to-[#C026FF] opacity-15 blur-2xl pointer-events-none"></div>
-              <div className="relative bg-[#13131A] p-6 rounded-3xl border border-slate-850 space-y-4 text-left font-sans">
+              <div className="relative bg-[#0F0F16] p-5 rounded-3xl border border-slate-800 space-y-4 text-left font-sans">
                 
-                <div className="flex justify-between items-center bg-[#0A0A0F] p-3 rounded-xl border border-slate-900">
+                {/* Header Mockup */}
+                <div className="flex justify-between items-center bg-[#13131F] p-3 rounded-2xl border border-indigo-950/40">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-full bg-[#8B2DFF] flex items-center justify-center font-bold text-xs text-white">D</div>
+                    <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center font-bold text-xs text-white">PJ</div>
                     <div>
-                      <h4 className="text-xs font-bold text-white">Douglas Silva</h4>
-                      <p className="text-[10px] text-slate-500 font-semibold">Reunião de Alinhamento • 30 min</p>
+                      <h4 className="text-xs font-black text-white font-sans">AdsHive Prospect B2B</h4>
+                      <p className="text-[9px] text-[#A1A1AA] font-semibold flex items-center gap-1 font-mono">
+                        <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping"></span>
+                        Ambiente de Teste Comercial Autenticado
+                      </p>
                     </div>
                   </div>
-                  <span className="bg-[#8B2DFF]/20 text-[#C026FF] font-bold text-[9px] px-2 py-0.5 rounded-full font-mono">Ativo</span>
+                  <span className="bg-indigo-500/10 text-indigo-400 font-mono font-bold text-[8.5px] px-2.5 py-1 rounded-lg border border-indigo-500/15">
+                    10 CRÉDITOS FREE
+                  </span>
                 </div>
 
-                <div className="space-y-3 font-sans">
-                  <div className="flex justify-between items-center">
-                    <span className="text-[10px] text-[#A1A1AA] font-bold uppercase tracking-wider font-mono">📅 Selecione um Dia</span>
-                    <span className="text-[10px] font-bold text-white">Junho 2026</span>
-                  </div>
-                  <div className="grid grid-cols-7 gap-1.5 text-center text-[10px] font-bold">
-                    <span className="py-1 text-slate-500">D</span>
-                    <span className="py-1 text-slate-500">S</span>
-                    <span className="py-1 text-slate-500">T</span>
-                    <span className="py-1 text-slate-500">Q</span>
-                    <span className="py-1 text-slate-500">Q</span>
-                    <span className="py-1 text-slate-500">S</span>
-                    <span className="py-1 text-slate-500">S</span>
-
-                    <span className="text-slate-700 py-1.5">31</span>
-                    <span className="text-white bg-slate-900/45 rounded-lg hover:bg-slate-800 py-1.5 cursor-pointer">1</span>
-                    <span className="text-white bg-slate-900/45 rounded-lg hover:bg-slate-800 py-1.5 cursor-pointer">2</span>
-                    <span className="text-white bg-slate-900/45 rounded-lg hover:bg-slate-800 py-1.5 cursor-pointer">3</span>
-                    <span className="text-white bg-slate-900/45 rounded-lg hover:bg-slate-800 py-1.5 cursor-pointer">4</span>
-                    <span className="text-white bg-[#8B2DFF] rounded-lg py-1.5 shadow-md shadow-[#8B2DFF]/30 cursor-pointer text-center">5</span>
-                    <span className="text-white bg-slate-900/45 rounded-lg hover:bg-slate-800 py-1.5 cursor-pointer">6</span>
-                  </div>
-
-                  <div className="space-y-1.5 pt-1">
-                    <span className="text-[10px] text-[#A1A1AA] font-bold uppercase tracking-wider font-mono">⏰ Horários Disponíveis</span>
-                    <div className="grid grid-cols-3 gap-2">
-                      <button type="button" className="bg-slate-900 hover:bg-slate-850 border border-slate-800 text-white font-bold text-[10.5px] py-1.5 rounded-lg text-center cursor-pointer">09:00</button>
-                      <button type="button" className="bg-slate-900 hover:bg-slate-850 border border-slate-800 text-white font-bold text-[10.5px] py-1.5 rounded-lg text-center cursor-pointer">10:30</button>
-                      <button type="button" className="bg-gradient-to-r from-[#8B2DFF] to-[#C026FF] text-white font-bold text-[10.5px] py-1.5 rounded-lg text-center cursor-pointer shadow-md shadow-[#8B2DFF]/25">14:00</button>
+                {/* Dashboard Stats Cards Mockup */}
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div className="bg-[#12121C] p-3 rounded-xl border border-slate-900 space-y-1">
+                    <span className="text-[8.5px] font-black text-slate-500 uppercase block tracking-wider font-mono">Leads Prospectados</span>
+                    <strong className="text-base text-white block font-mono">1.340 <span className="text-[10px] text-emerald-400 font-normal font-sans">+18%</span></strong>
+                    <div className="w-full bg-[#1A1A26] h-1 rounded-full overflow-hidden">
+                      <div className="bg-[#8B2DFF] h-full w-[65%]"></div>
                     </div>
                   </div>
+
+                  <div className="bg-[#12121C] p-3 rounded-xl border border-slate-900 space-y-1">
+                    <span className="text-[8.5px] font-black text-slate-500 uppercase block tracking-wider font-mono">Mensagens Enviadas</span>
+                    <strong className="text-base text-white block font-mono">482 <span className="text-[10px] text-indigo-400 font-normal font-sans">SDR IA</span></strong>
+                    <div className="w-full bg-[#1A1A26] h-1 rounded-full overflow-hidden">
+                      <div className="bg-indigo-500 h-full w-[80%]"></div>
+                    </div>
+                  </div>
+
+                  <div className="bg-[#12121C] p-3 rounded-xl border border-slate-900 space-y-1">
+                    <span className="text-[8.5px] font-black text-slate-500 uppercase block tracking-wider font-mono">Pesquisas Disponíveis</span>
+                    <strong className="text-base text-emerald-400 block font-mono">Ilimitado</strong>
+                    <span className="text-[8px] text-slate-400 font-sans">Google Maps Ativo</span>
+                  </div>
+
+                  <div className="bg-[#12121C] p-3 rounded-xl border border-slate-900 space-y-1">
+                    <span className="text-[8.5px] font-black text-slate-500 uppercase block tracking-wider font-mono">Taxa de Conversão</span>
+                    <strong className="text-base text-amber-400 block font-mono">24.6%</strong>
+                    <span className="text-[8px] text-slate-400 font-sans">Lembretes Automáticos</span>
+                  </div>
                 </div>
+
+                {/* Quick Action Mockup Input */}
+                <div className="bg-[#13131F] p-3 rounded-2xl border border-slate-900 space-y-2">
+                  <span className="text-[9px] font-black text-[#C026FF] uppercase tracking-wider block font-mono">⚡ Teste Rápido de Prospecção</span>
+                  <div className="flex gap-2">
+                    <div className="flex-1 bg-[#0A0A0F] py-2 px-3 rounded-xl border border-slate-900 text-slate-400 text-[10px] flex items-center justify-between font-mono">
+                      <span>Ex: Contabilidade em São Paulo</span>
+                    </div>
+                    <button 
+                      type="button" 
+                      onClick={() => onNavigateToAuth("register")}
+                      className="bg-gradient-to-r from-[#8B2DFF] to-[#C026FF] text-white font-extrabold text-[10px] px-3.5 rounded-xl cursor-pointer hover:shadow-md hover:shadow-[#8B2DFF]/20 transition-all border-none"
+                    >
+                      Buscar
+                    </button>
+                  </div>
+                </div>
+
+                {/* Call To Action button on mockup to run the demo */}
+                <button
+                  type="button"
+                  onClick={() => onNavigateToAuth("register")}
+                  className="w-full bg-[#1A1A2B] hover:bg-[#25253D] text-white font-extrabold text-[11px] py-2.5 rounded-xl text-center cursor-pointer transition-all border border-[#8B2DFF]/20 flex items-center justify-center gap-1.5"
+                >
+                  <Play className="w-3.5 h-3.5 text-emerald-400 inline" />
+                  <span>Cadastrar Empresa e Iniciar Teste Grátis</span>
+                </button>
 
               </div>
             </div>

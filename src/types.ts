@@ -77,6 +77,9 @@ export interface Lead {
   meetingTime?: string;
   meetingTitle?: string;
   meetLink?: string;
+  isCorporatePriority?: boolean;
+  corporateTag?: string;
+  b2bRecommendation?: string;
 }
 
 export interface GeneratedMessage {

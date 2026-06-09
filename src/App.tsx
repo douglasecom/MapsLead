@@ -166,29 +166,67 @@ export default function App() {
     }
   };
 
-  // Route listening effect for direct link URL checks
+  // Route listening effect for direct link URL checks and state synchronization
+  const tabToPathMap: Record<string, string> = {
+    inicio: "/dashboard",
+    pesquisa: "/pesquisa-maps",
+    leads: "/gestao-de-leads",
+    oportunidades: "/oportunidades",
+    ai_gerador: "/copiloto-ia",
+    agenda: "/agenda-comercial",
+    crm: "/crm-kanban",
+    radar: "/radar",
+    comercial: "/comercial",
+    loja_creditos: "/loja-creditos",
+    financeiro: "/financeiro",
+    "dashboard-owner": "/dashboard-owner",
+    admin: "/admin"
+  };
+
+  const pathToTabMap: Record<string, any> = {
+    "/dashboard": "inicio",
+    "/dasboard": "inicio",
+    "/pesquisa-maps": "pesquisa",
+    "/gestao-de-leads": "leads",
+    "/oportunidades": "oportunidades",
+    "/copiloto-ia": "ai_gerador",
+    "/agenda-comercial": "agenda",
+    "/crm-kanban": "crm",
+    "/radar": "radar",
+    "/comercial": "comercial",
+    "/loja-creditos": "loja_creditos",
+    "/financeiro": "financeiro",
+    "/dashboard-owner": "dashboard-owner",
+    "/admin": "admin"
+  };
+
   useEffect(() => {
     const handleLocationRouting = () => {
       const pName = window.location.pathname;
-      if (pName === "/owner" || pName === "/admin" || pName === "/dashboard-owner") {
-        if (!session) {
+      if (!session) {
+        if (pName === "/register") {
+          setUnauthView("register");
+        } else if (pName === "/login") {
           setUnauthView("login");
-          return; // Wait for AuthGate login first
-        }
-        if (session.email?.toLowerCase() === "douglasbateriacma@gmail.com") {
-          setActiveTab("dashboard-owner");
-          triggerNotification("Redirecionado para o Painel de Controle Master com sucesso!", "success");
         } else {
-          triggerNotification("Acesso negado: essa rota administrativa é exclusiva para o Owner.", "warning");
-          setActiveTab("inicio");
-          window.history.replaceState({}, "", "/");
+          setUnauthView("landing");
         }
-      } else if (pName === "/register") {
-        setUnauthView("register");
-      } else if (pName === "/login") {
-        setUnauthView("login");
       } else {
-        setUnauthView("landing");
+        // Authenticated routing
+        if (pName === "/owner" || pName === "/admin" || pName === "/dashboard-owner") {
+          if (session.email?.toLowerCase() === "douglasbateriacma@gmail.com") {
+            setActiveTab("dashboard-owner");
+          } else {
+            triggerNotification("Acesso negado: essa rota administrativa é exclusiva para o Owner.", "warning");
+            setActiveTab("inicio");
+            window.history.replaceState({}, "", "/dashboard");
+          }
+        } else if (pathToTabMap[pName]) {
+          setActiveTab(pathToTabMap[pName]);
+        } else if (pName === "/" || pName === "" || pName === "/login" || pName === "/register" || pName === "/landing") {
+          setActiveTab("inicio");
+          window.history.replaceState({}, "", "/dashboard");
+        }
       }
     };
     handleLocationRouting();
@@ -198,6 +236,17 @@ export default function App() {
       window.removeEventListener("popstate", handleLocationRouting);
     };
   }, [session]);
+
+  // Keep URL in sync with activeTab when logged in
+  useEffect(() => {
+    if (session) {
+      const currentPath = window.location.pathname;
+      const expectedPath = tabToPathMap[activeTab];
+      if (expectedPath && currentPath !== expectedPath) {
+        window.history.pushState({}, "", expectedPath);
+      }
+    }
+  }, [activeTab, session]);
   
   // Real-time State Lists
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -733,7 +782,10 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
           status: "novo",
           captured: false,
           gmbAnalysis: l.gmbAnalysis,
-          avatarColor: getAvatarColorForNiche(searchNiche)
+          avatarColor: getAvatarColorForNiche(searchNiche),
+          isCorporatePriority: l.isCorporatePriority,
+          corporateTag: l.corporateTag,
+          b2bRecommendation: l.b2bRecommendation
         }));
         
         setSearchResults(formattedLeads);
@@ -961,10 +1013,13 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
                   setActiveTab("dashboard-owner");
                 } else {
                   setActiveTab("inicio");
-                  window.history.replaceState({}, "", "/");
+                  window.history.replaceState({}, "", "/dashboard");
                 }
+              } else if (pathToTabMap[currentPath]) {
+                setActiveTab(pathToTabMap[currentPath]);
               } else {
                 setActiveTab("inicio");
+                window.history.replaceState({}, "", "/dashboard");
               }
             }} 
           />
@@ -1904,6 +1959,11 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
 
                         {/* Badges gap listing */}
                         <div className="flex flex-wrap gap-1.5 mb-6">
+                          {lead.isCorporatePriority && (
+                            <span className="bg-purple-100 text-purple-800 border border-purple-200 text-[10px] font-black px-2 py-0.5 rounded uppercase flex items-center gap-0.5 shadow-sm">
+                              👑 {lead.corporateTag || "PJ Prioritária"}
+                            </span>
+                          )}
                           {!lead.hasWebsite && (
                             <span className="bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-extrabold px-2 py-0.5 rounded uppercase">
                               Website Missing
@@ -2040,6 +2100,11 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
                             <span className="text-[9px] font-black text-[#5a48ef] uppercase tracking-widest bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full inline-block">
                               {selectedMapPin.niche}
                             </span>
+                            {selectedMapPin.isCorporatePriority && (
+                              <span className="text-[9px] font-black text-purple-705 uppercase tracking-widest bg-purple-50 border border-purple-100 px-2 py-0.5 rounded-full inline-block ml-1.5 shadow-sm">
+                                👑 {selectedMapPin.corporateTag || "PJ Prioritária"}
+                              </span>
+                            )}
                             <h5 className="font-extrabold text-xs text-slate-900 leading-tight truncate">{selectedMapPin.name}</h5>
                             <p className="text-[10px] text-slate-400 font-bold truncate">{selectedMapPin.location}</p>
                           </div>

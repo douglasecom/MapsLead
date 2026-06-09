@@ -269,6 +269,42 @@ export const Financeiro: React.FC<FinanceiroProps> = ({ session, triggerNotifica
     }
   ];
 
+  // Dados estruturados para evolução do faturamento e consumo mensal de créditos no Recharts
+  const chartData = [
+    {
+      month: "Mar/26",
+      "Faturamento": 149,
+      "Leads Coletados": 180,
+      "Mensagens IA": 120,
+      "Pesquisas Maps": 65,
+      "Consumo Total": 365
+    },
+    {
+      month: "Abr/26",
+      "Faturamento": 349,
+      "Leads Coletados": 420,
+      "Mensagens IA": 350,
+      "Pesquisas Maps": 180,
+      "Consumo Total": 950
+    },
+    {
+      month: "Mai/26",
+      "Faturamento": 349,
+      "Leads Coletados": 480,
+      "Mensagens IA": 395,
+      "Pesquisas Maps": 215,
+      "Consumo Total": 1090
+    },
+    {
+      month: "Jun/26",
+      "Faturamento": planName === "Unlimited" ? 999 : (planName === "Pro" ? 349 : (planName === "Starter" ? 149 : 0)),
+      "Leads Coletados": 320,
+      "Mensagens IA": aiUsage.messagesUsed,
+      "Pesquisas Maps": 154,
+      "Consumo Total": 320 + aiUsage.messagesUsed + 154
+    }
+  ];
+
   // Exportar histórico de consumo mensal para PDF usando jsPDF
   const handleExportPDF = () => {
     try {
@@ -1199,6 +1235,71 @@ Todos os direitos reservados.
             </table>
           </div>
         )}
+      </div>
+
+      {/* EVOLUÇÃO MENSAL GRÁFICA DE FATURAMENTO E CONSUMO */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* GRÁFICO 1: EVOLUÇÃO DO FATURAMENTO */}
+        <div className="bg-[#151520] border border-purple-950 rounded-3xl p-6 shadow-xl relative text-left overflow-hidden">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-emerald-500/5 via-transparent to-transparent pointer-events-none"></div>
+          <div className="pb-4 border-b border-purple-950/60 mb-5">
+            <h3 className="text-lg font-black text-white flex items-center gap-2">
+              <DollarSign className="w-5 h-5 text-emerald-400" />
+              <span>Evolução do Faturamento Mensal</span>
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">Comparativo de faturamento (R$) gerado por assinaturas e recargas de faturamento.</p>
+          </div>
+          
+          <div className="h-64 w-full text-[10px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 5 }}>
+                <defs>
+                  <linearGradient id="gradientFaturamento" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10B981" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#221133" opacity={0.3} />
+                <XAxis dataKey="month" stroke="#94a3b8" />
+                <YAxis stroke="#94a3b8" tickFormatter={(v) => `R$ ${v}`} />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: '#151520', borderColor: '#047857', borderRadius: '12px' }} 
+                  formatter={(value: any) => [`R$ ${value},00`, 'Faturamento']}
+                />
+                <Area type="monotone" dataKey="Faturamento" stroke="#10B981" fillOpacity={1} fill="url(#gradientFaturamento)" strokeWidth={3} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* GRÁFICO 2: EVOLUÇÃO DO CONSUMO DE CRÉDITOS */}
+        <div className="bg-[#151520] border border-purple-950 rounded-3xl p-6 shadow-xl relative text-left overflow-hidden">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-[#D946EF]/5 via-transparent to-transparent pointer-events-none"></div>
+          <div className="pb-4 border-b border-purple-950/60 mb-5">
+            <h3 className="text-lg font-black text-white flex items-center gap-2">
+              <Coins className="w-5 h-5 text-[#D946EF]" />
+              <span>Evolução de Consumo de Créditos</span>
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">Evolução do engajamento com recursos do sistema (leads, IA, buscas).</p>
+          </div>
+
+          <div className="h-64 w-full text-[10px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#221133" opacity={0.3} />
+                <XAxis dataKey="month" stroke="#94a3b8" />
+                <YAxis stroke="#94a3b8" />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: '#151520', borderColor: '#4c1d95', borderRadius: '12px' }}
+                />
+                <Legend iconType="circle" wrapperStyle={{ paddingTop: '10px' }} />
+                <Bar dataKey="Leads Coletados" name="Leads" stackId="a" fill="#8A2BE2" radius={[0, 0, 0, 0]} />
+                <Bar dataKey="Mensagens IA" name="Mensagens IA" stackId="a" fill="#D946EF" radius={[0, 0, 0, 0]} />
+                <Bar dataKey="Pesquisas Maps" name="Pesquisas Maps" stackId="a" fill="#F59E0B" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
       </div>
 
       {/* HISTÓRICO DE CONSUMO DE CRÉDITOS TABLE */}
