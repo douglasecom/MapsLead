@@ -136,12 +136,29 @@ export default function App() {
           : path.substring(9);
         setIsPublicCalendly(true);
         setCalendlyUserSlug(slug);
+      } else if (hash === "#agendar-reuniao") {
+        setIsPublicCalendly(true);
+        setCalendlyUserSlug("leads-sem-site");
       } else if (hash.startsWith("#") && hash.length > 2) {
         const slug = hash.substring(1);
-        if (!["inicio", "leads", "pesquisa", "agenda", "crm", "comercial", "radar", "admin", "oportunidades", "financeiro", "ai_gerador"].includes(slug)) {
+        const landingPageSections = [
+          "como-funciona", 
+          "diferenciais", 
+          "leads-sem-site", 
+          "prints-da-plataforma", 
+          "calendly-integrado", 
+          "comparativo-planos", 
+          "perguntas-frequentes", 
+          "agenda-e-reunioes"
+        ];
+        if (!landingPageSections.includes(slug) && !["inicio", "leads", "pesquisa", "agenda", "crm", "comercial", "radar", "admin", "oportunidades", "financeiro", "ai_gerador"].includes(slug)) {
           setIsPublicCalendly(true);
           setCalendlyUserSlug(slug);
+        } else {
+          setIsPublicCalendly(false);
         }
+      } else {
+        setIsPublicCalendly(false);
       }
     };
     handleHashAndPath();
@@ -789,7 +806,11 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
         }));
         
         setSearchResults(formattedLeads);
-        triggerNotification(`Encontramos ${formattedLeads.length} novos leads do Google Maps!`, "success");
+        if (data.isSandboxFallback) {
+          triggerNotification("Simulador Ativo: Exibindo prospecção realista de IA (Sua chave Google Cloud necessita ativar o faturamento).", "info");
+        } else {
+          triggerNotification(`Encontramos ${formattedLeads.length} novos leads do Google Maps!`, "success");
+        }
       } else {
         throw new Error("Formato inválido recebido do servidor: campo 'leads' ausente ou inválido.");
       }

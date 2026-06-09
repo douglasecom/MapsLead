@@ -646,7 +646,8 @@ A oferta de serviços de otimização comercial, criação de sites e tráfego p
             <a href="#como-funciona" className="hover:text-white transition-colors cursor-pointer">Como Funciona</a>
             <a href="#diferenciais" className="hover:text-white transition-colors cursor-pointer">Diferenciais</a>
             <a href="#leads-sem-site" className="hover:text-white transition-colors cursor-pointer">Sem Website</a>
-            <a href="#prints-da-plataforma" className="hover:text-white transition-colors cursor-pointer">Agende uma Reunião Empresarial!</a>
+            <a href="#prints-da-plataforma" className="hover:text-white transition-colors cursor-pointer">Mockups</a>
+            <a href="#agendar-reuniao" className="text-[#8B2DFF] hover:text-white transition-all font-extrabold flex items-center gap-1.5 cursor-pointer bg-[#8B2DFF]/10 px-2.5 py-1 rounded-lg border border-[#8B2DFF]/25">📅 Agende uma Reunião Empresarial!</a>
             <a href="#comparativo-planos" className="hover:text-white transition-colors cursor-pointer">Planos</a>
             <a href="#perguntas-frequentes" className="hover:text-white transition-colors cursor-pointer flex items-center gap-1">Dúvidas</a>
           </nav>
@@ -1209,13 +1210,13 @@ A oferta de serviços de otimização comercial, criação de sites e tráfego p
       <section id="prints-da-plataforma" className="py-20 max-w-7xl mx-auto px-4 text-center space-y-12">
         <div className="space-y-3 max-w-2xl mx-auto">
           <span className="bg-[#8B2DFF]/15 text-[#C026FF] border border-[#8B2DFF]/25 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest font-mono">
-            CADASTROS EXCLUSIVOS PJ & EMPRESARIAIS
+            EXPERIÊNCIA INTERNA DO USUÁRIO
           </span>
           <h2 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-            Agende uma Reunião Empresarial!
+            Explore Por Dentro do Nosso Ecossistema
           </h2>
           <p className="text-[#A1A1AA] text-xs sm:text-sm">
-            Recursos premium e simulações de painel liberados exclusivamente para cadastros empresariais estruturados (PJ). Visualize nossa inteligência de SDR abaixo.
+            Clique nas abas abaixo para simular as telas e funcionalidades chave que você acessará logo após criar seu cadastro grátis.
           </p>
         </div>
 
