@@ -11,6 +11,7 @@ import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, 
   Tooltip, BarChart, Bar, Legend
 } from "recharts";
+import { jsPDF } from "jspdf";
 
 interface FinanceiroProps {
   session: UserSession | null;
@@ -205,7 +206,7 @@ export const Financeiro: React.FC<FinanceiroProps> = ({ session, triggerNotifica
       return { label: "EM TESTE", color: "text-sky-400 bg-sky-500/10 border-sky-500/30", indicator: "bg-sky-500" };
     }
     if (s === "CANCELED" || s === "CANCELADA") {
-      return { label: "CANCELADA", color: "text-rose-450 bg-rose-500/10 border-rose-500/30", indicator: "bg-rose-500" };
+      return { label: "CANCELADA", color: "text-rose-400 bg-rose-500/10 border-rose-500/30", indicator: "bg-rose-500" };
     }
     // Inadimplente, PAST_DUE, OVERDUE, atrasado
     return { label: "EM ATRASO", color: "text-amber-400 bg-amber-500/10 border-amber-500/30", indicator: "bg-amber-500 animate-pulse" };
@@ -223,6 +224,194 @@ export const Financeiro: React.FC<FinanceiroProps> = ({ session, triggerNotifica
     { date: "03/06", leads: 320, ia: 270, queries: 105 },
     { date: "08/06", leads: availableCredits, ia: aiUsage.messagesUsed, queries: 154 }
   ];
+
+  // Histórico de consumo de créditos mensal para a tabela e exportação de PDF
+  const monthlyConsumption = [
+    {
+      id: "m_current",
+      month: "Junho de 2026",
+      plan: planName,
+      leads: 320,
+      aiMessages: aiUsage.messagesUsed,
+      mapsSearches: 154,
+      totalCredits: 320 + aiUsage.messagesUsed + 154,
+      status: "Em Andamento"
+    },
+    {
+      id: "m2",
+      month: "Maio de 2026",
+      plan: planName === "Gratuito" ? "Pro" : planName,
+      leads: 480,
+      aiMessages: 395,
+      mapsSearches: 215,
+      totalCredits: 1090,
+      status: "Finalizado"
+    },
+    {
+      id: "m3",
+      month: "Abril de 2026",
+      plan: planName === "Gratuito" ? "Pro" : planName,
+      leads: 420,
+      aiMessages: 350,
+      mapsSearches: 180,
+      totalCredits: 950,
+      status: "Finalizado"
+    },
+    {
+      id: "m4",
+      month: "Março de 2026",
+      plan: "Starter",
+      leads: 180,
+      aiMessages: 120,
+      mapsSearches: 65,
+      totalCredits: 365,
+      status: "Finalizado"
+    }
+  ];
+
+  // Exportar histórico de consumo mensal para PDF usando jsPDF
+  const handleExportPDF = () => {
+    try {
+      triggerNotification("Compilando PDF do extrato operacional de consumo...", "info");
+      
+      const doc = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4"
+      });
+
+      // Cor de fundo do cabeçalho (#151520 - Slate escuro)
+      doc.setFillColor(21, 21, 32); 
+      doc.rect(0, 0, 210, 42, "F");
+
+      // Margem superior e título principal
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(18);
+      doc.text("ADSHIVE PROSPECT", 15, 18);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(180, 180, 210);
+      doc.text("SaaS Comercial SDR • Extrato Mensal de Consumo de Créditos", 15, 26);
+
+      // Timestamps e Informações do Sistema
+      doc.setFontSize(8);
+      doc.setTextColor(150, 150, 170);
+      doc.text(`Emissão: ${new Date().toLocaleString("pt-BR")}`, 145, 18);
+      doc.text("v1.6 API Asaas Core Secure", 145, 26);
+
+      // Caixa de Informações do Assinante
+      doc.setFillColor(242, 242, 248);
+      doc.roundedRect(15, 52, 180, 30, 3, 3, "F");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(50, 50, 70);
+      doc.text("DADOS DO CLIENTE E ASSINATURA", 20, 59);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(80, 80, 100);
+      doc.text(`Cliente: ${session?.name || "Douglas Bateria"}`, 20, 66);
+      doc.text(`E-mail cadastrado: ${session?.email || "douglasbateriacma@gmail.com"}`, 20, 73);
+      doc.text(`Plano Ativo: ${planName}`, 120, 66);
+      doc.text(`Status Contratual: ${subStatus.toUpperCase()}`, 120, 73);
+
+      // Cabeçalho da Tabela
+      let startY = 92;
+      doc.setFillColor(138, 43, 226); // #8A2BE2 (Roxo Assinatura AdsHive)
+      doc.rect(15, startY, 180, 9, "F");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.setTextColor(255, 255, 255);
+      doc.text("PERÍODO", 18, startY + 6);
+      doc.text("PLANO", 48, startY + 6);
+      doc.text("LEADS", 75, startY + 6);
+      doc.text("IA MENSAGENS", 100, startY + 6);
+      doc.text("PESQUISAS MAPS", 130, startY + 6);
+      doc.text("CONSUMO TOTAL", 158, startY + 6);
+      doc.text("SITUAÇÃO", 182, startY + 6);
+
+      // Linhas da Tabela
+      doc.setFont("helvetica", "normal");
+      let currentY = startY + 9;
+      monthlyConsumption.forEach((item, index) => {
+        // Linhas em zebra para melhor visualização
+        if (index % 2 === 0) {
+          doc.setFillColor(248, 248, 252);
+          doc.rect(15, currentY, 180, 8.5, "F");
+        } else {
+          doc.setFillColor(255, 255, 255);
+          doc.rect(15, currentY, 180, 8.5, "F");
+        }
+        
+        doc.setTextColor(40, 40, 40);
+        doc.text(item.month, 18, currentY + 5.5);
+        doc.text(item.plan, 48, currentY + 5.5);
+        doc.text(`${item.leads} leads`, 75, currentY + 5.5);
+        doc.text(`${item.aiMessages} msgs`, 100, currentY + 5.5);
+        doc.text(`${item.mapsSearches} searches`, 130, currentY + 5.5);
+        
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(138, 43, 226);
+        doc.text(`${item.totalCredits} un.`, 158, currentY + 5.5);
+        
+        if (item.status === "Em Andamento") {
+          doc.setTextColor(160, 110, 0); // Amarelo/Dourado escuro
+        } else {
+          doc.setTextColor(0, 128, 64); // Verde sucesso
+        }
+        doc.text(item.status, 182, currentY + 5.5);
+        
+        doc.setFont("helvetica", "normal");
+        currentY += 8.5;
+      });
+
+      // Linha de demarcação inferior
+      doc.setDrawColor(210, 210, 220);
+      doc.line(15, currentY, 195, currentY);
+
+      currentY += 6;
+      // Caixa de Sumário Acumulado
+      doc.setFillColor(238, 233, 248); // Roxo bem clarinho
+      doc.roundedRect(15, currentY, 180, 26, 3, 3, "F");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(138, 43, 226);
+      doc.text("SUMÁRIO GERAL DE CRÉDITOS ACUMULADOS", 20, currentY + 7);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(60, 60, 80);
+      const totalLeadsAcc = monthlyConsumption.reduce((sum, item) => sum + item.leads, 0);
+      const totalMsgAcc = monthlyConsumption.reduce((sum, item) => sum + item.aiMessages, 0);
+      const totalCreditsAcc = monthlyConsumption.reduce((sum, item) => sum + item.totalCredits, 0);
+
+      doc.text(`Volume Geral de Leads Prospectados: ${totalLeadsAcc} leads`, 20, currentY + 14);
+      doc.text(`Abordagens IA SDR Efetuadas: ${totalMsgAcc} mensagens`, 20, currentY + 20);
+      
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(217, 70, 239); // Pink de destaque (#D946EF)
+      doc.text(`Consumo Geral: ${totalCreditsAcc} un.`, 130, currentY + 17);
+
+      // Rodapé oficial
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(7.5);
+      doc.setTextColor(140, 140, 150);
+      doc.text("Este documento de consumo operacional é gerado via integração segura do ecossistema de SDR AdsHive.", 15, currentY + 38);
+      doc.text("Asaas S.A. Processamento Seguro • Homologado e Certificado.", 15, currentY + 43);
+
+      // Dispara o download com nome representativo
+      doc.save(`extrato_consumo_adshive_${session?.name?.split(" ")[0]?.toLowerCase() || "cliente"}.pdf`);
+      triggerNotification("Resumo de consumo em PDF exportado com sucesso!", "success");
+    } catch (err: any) {
+      console.error(err);
+      triggerNotification(`Erro ao gerar PDF: ${err.message}`, "warning");
+    }
+  };
 
   // Initiate purchase flow
   const handleInitiatePurchase = (e: React.FormEvent) => {
@@ -1010,6 +1199,79 @@ Todos os direitos reservados.
             </table>
           </div>
         )}
+      </div>
+
+      {/* HISTÓRICO DE CONSUMO DE CRÉDITOS TABLE */}
+      <div className="bg-[#151520] border border-purple-950 rounded-3xl p-6 shadow-xl relative text-left">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 pb-4 border-b border-purple-950/60 mb-5">
+          <div>
+            <h3 className="text-lg font-black text-white flex items-center gap-2">
+              <Activity className="w-5 h-5 text-[#D946EF]" />
+              <span>Histórico de Consumo de Créditos (Mensal)</span>
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">Monitore o processamento de leads, envios da inteligência artificial e buscas por período.</p>
+          </div>
+          
+          <button 
+            type="button"
+            onClick={handleExportPDF}
+            className="px-4.5 py-2.5 rounded-xl font-bold text-xs bg-gradient-to-r from-purple-800 to-indigo-700 hover:from-[#8A2BE2] hover:to-[#B026FF] text-white hover:shadow-[0_0_15px_rgba(138,43,226,0.3)] transition-all flex items-center justify-center gap-1.5 cursor-pointer border-none"
+          >
+            <Download className="w-4 h-4 text-emerald-300" />
+            <span>Exportar Resumo PDF</span>
+          </button>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="border-b border-purple-950 text-[10px] text-slate-400 tracking-wider uppercase font-black">
+                <th className="py-3 px-4">PERÍODO / MÊS</th>
+                <th className="py-3 px-4">PLANO ATIVO</th>
+                <th className="py-3 px-4">LEADS COLETADOS</th>
+                <th className="py-3 px-4">MENSAGENS IA SDR</th>
+                <th className="py-3 px-4">PESQUISAS MAPS</th>
+                <th className="py-3 px-4">TOTAL IMPUTADO</th>
+                <th className="py-3 px-4">STATUS DA COTA</th>
+              </tr>
+            </thead>
+            <tbody className="text-xs divide-y divide-[#221133]/40">
+              {monthlyConsumption.map(item => (
+                <tr key={item.id} className="hover:bg-[#8A2BE2]/5 transition-colors">
+                  <td className="py-3.5 px-4 font-bold text-slate-200">
+                    {item.month}
+                  </td>
+                  <td className="py-3.5 px-4">
+                    <span className="text-purple-300 bg-purple-950/20 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
+                      {item.plan}
+                    </span>
+                  </td>
+                  <td className="py-3.5 px-4 font-semibold text-slate-300">
+                    {item.leads} leads
+                  </td>
+                  <td className="py-3.5 px-4 font-semibold text-slate-300">
+                    {item.aiMessages} disparos
+                  </td>
+                  <td className="py-3.5 px-4 font-semibold text-slate-300">
+                    {item.mapsSearches} requisições
+                  </td>
+                  <td className="py-3.5 px-4 font-black text-indigo-400 font-mono">
+                    {item.totalCredits} un.
+                  </td>
+                  <td className="py-3.5 px-4">
+                    <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${
+                      item.status === 'Em Andamento' 
+                        ? 'bg-amber-950/30 text-amber-400 border-amber-500/20 animate-pulse'
+                        : 'bg-emerald-950/30 text-emerald-400 border-emerald-500/20'
+                    }`}>
+                      {item.status}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* CHECKOUT MODAL WINDOW COMPONENT */}

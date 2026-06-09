@@ -30,7 +30,6 @@ try {
     const dbId = firebaseConfig.firestoreDatabaseId || "ai-studio-07fa01e6-d6a1-4d4e-b05a-262a2373f3d7";
     db = getFirestore(fbApp, dbId);
     console.log("Firebase initialized successfully on server-side.");
-    seedPlans();
 
     // Authenticate backend securely to enable server-side updates bypassing client-restrictions
     const auth = getAuth(fbApp);
@@ -52,6 +51,7 @@ try {
           subscriptionStatus: "ACTIVE"
         }, { merge: true });
         console.log("[Firebase Server Auth] Confirmed Admin privilege fields in Firestore.");
+        await seedPlans();
       })
       .catch(async (err) => {
         if (err.code === "auth/user-not-found" || err.code === "auth/invalid-credential" || err.code === "auth/cannot-find-user" || err.message.includes("credential")) {
@@ -70,6 +70,7 @@ try {
               subscriptionStatus: "ACTIVE"
             });
             console.log("[Firebase Server Auth] Created and provisioned Admin profile in Firestore.");
+            await seedPlans();
           } catch (createErr: any) {
             console.error("[Firebase Server Auth] Auto-create backend admin account failed:", createErr.message);
           }

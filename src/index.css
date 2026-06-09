@@ -133,7 +133,7 @@ body {
 .theme-dark .bg-white,
 .theme-dark .bg-slate-50,
 .theme-dark .bg-slate-100,
-.theme-dark .bg-slate-200/50,
+.theme-dark .bg-slate-200\/50,
 .theme-dark .bg-[#f8f9ff] {
   background-color: var(--bg-app);
 }
@@ -154,7 +154,7 @@ body {
 
 .theme-dark .text-slate-800,
 .theme-dark .text-slate-900,
-.theme-dark .text-[#0b1c30] {
+.theme-dark .text-\[\#0b1c30\] {
   color: var(--text-primary);
 }
 
@@ -169,13 +169,31 @@ body {
 }
 
 #tab-agenda-view {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 1rem;
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)) !important;
+  gap: 1rem !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+#tab-agenda-view > * {
+  min-width: 0 !important;
+}
+
+#tab-agenda-view .ring-1 {
+  border: 2px solid #D946EF !important;
+  box-shadow: 0 0 10px #D946EF !important;
 }
 
 /* Media query to force a clean vertical list view of the agenda on mobile & tablets */
 @media (max-width: 768px) {
+  #tab-agenda-view {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+  }
+
   #tab-agenda-view .grid-cols-7.text-center {
     display: none !important;
   }
@@ -184,7 +202,7 @@ body {
   #tab-agenda-view .grid-cols-7.divide-x {
     display: grid !important;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)) !important;
-    gap: 12px !important;
+    gap: 1rem !important;
     background: transparent !important;
     min-width: 100% !important;
   }
@@ -206,8 +224,8 @@ body {
   }
 
   #tab-agenda-view .grid-cols-7.gap-\[1px\] > div.ring-1 {
-    border: 2px solid #B026FF !important;
-    box-shadow: 0 0 16px rgba(176, 38, 255, 0.7), inset 0 0 8px rgba(176, 38, 255, 0.3) !important;
+    border: 2px solid #D946EF !important;
+    box-shadow: 0 0 10px #D946EF !important;
   }
 
   /* Only show days that actually have appointments or the active current day (Today) to avoid a huge list of empty days */
@@ -245,7 +263,7 @@ body {
   #tab-agenda-view .grid-cols-7.min-h-\[400px\] {
     display: grid !important;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)) !important;
-    gap: 12px !important;
+    gap: 1rem !important;
     min-height: auto !important;
     background: transparent !important;
     min-width: 100% !important;

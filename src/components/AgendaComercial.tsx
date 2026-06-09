@@ -14,7 +14,8 @@ import {
   Calendar, Plus, Clock, Video, Phone, MessageSquare, MapPin, 
   User, CheckCircle2, AlertTriangle, Play, Sparkles, Filter, 
   Trash2, Edit, ChevronLeft, ChevronRight, FileText, Check, 
-  Share2, ExternalLink, Settings, Shield, Bell, Award, ArrowUpRight, CheckCircle, TrendingUp, DollarSign, ListOrdered, CalendarDays
+  Share2, ExternalLink, Settings, Shield, Bell, Award, ArrowUpRight, CheckCircle, TrendingUp, DollarSign, ListOrdered, CalendarDays,
+  Search, X
 } from 'lucide-react';
 
 interface AgendaComercialProps {
@@ -36,6 +37,16 @@ export const AgendaComercial: React.FC<AgendaComercialProps> = ({
 }) => {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const filteredMeetings = useMemo(() => {
+    if (!searchTerm.trim()) return meetings;
+    const term = searchTerm.toLowerCase();
+    return meetings.filter(m => 
+      (m.company && m.company.toLowerCase().includes(term)) || 
+      (m.title && m.title.toLowerCase().includes(term))
+    );
+  }, [meetings, searchTerm]);
   const [activeTab, setActiveTab2] = useState<'calendario' | 'followup' | 'performance' | 'owner_panel' | 'config_calendly'>('calendario');
   const [calendarView, setCalendarView] = useState<'dia' | 'semana' | 'mes' | 'lista'>('mes');
   
@@ -508,6 +519,60 @@ export const AgendaComercial: React.FC<AgendaComercialProps> = ({
     }
   };
 
+  // Quick status update for appointment
+  const handleUpdateMeetingStatus = async (meetingId: string, newStatus: 'Agendado' | 'Confirmado' | 'Realizado' | 'Cancelado' | 'Reagendado') => {
+    try {
+      const matchMeeting = meetings.find(m => m.id === meetingId);
+      if (!matchMeeting) return;
+      
+      const updatedMeeting: Meeting = { 
+        ...matchMeeting, 
+        status: newStatus 
+      };
+      
+      await setDoc(doc(db, 'meetings', meetingId), updatedMeeting);
+      
+      setMeetings(prev => prev.map(m => m.id === meetingId ? updatedMeeting : m));
+      
+      // Update the Lead inside CRM if applicable
+      if (matchMeeting.leadId) {
+        let targetStatus: 'reuniao' | 'negociacao' | 'proposta' | 'novo' = 'reuniao';
+        if (newStatus === 'Realizado') {
+          targetStatus = 'negociacao';
+        }
+
+        const timeline: TimelineItem = {
+          id: Math.random().toString(36).substring(2, 11),
+          type: 'status_change',
+          title: `Status da Reunião: ${newStatus}`,
+          description: `Compromisso "${matchMeeting.title}" marcado como ${newStatus} por ação rápida.`,
+          createdAt: new Date().toISOString()
+        };
+
+        setLeads(prev => prev.map(l => {
+          if (l.id === matchMeeting.leadId) {
+            const up: Lead = {
+              ...l,
+              status: targetStatus,
+              timeline: l.timeline ? [timeline, ...l.timeline] : [timeline]
+            };
+            
+            updateDoc(doc(db, 'leads', l.id), {
+              status: targetStatus
+            }).catch(err => console.error("Falha ao salvar no CRM:", err));
+
+            return up;
+          }
+          return l;
+        }));
+      }
+
+      triggerNotification(`Status do compromisso atualizado para ${newStatus} com sucesso!`, 'success');
+    } catch (err: any) {
+      triggerNotification(`Erro ao atualizar status: ${err.message}`, 'error');
+    }
+  };
+
   // Calendly profile setup save
   const handleSaveCalendly = () => {
     localStorage.setItem(`calendly_${currentUserId}`, JSON.stringify(calendlyConfig));
@@ -626,7 +691,7 @@ export const AgendaComercial: React.FC<AgendaComercialProps> = ({
   // Filter meetings active for each calendar cell day
   const getDayMeetings = (d: Date) => {
     const formatted = d.toISOString().substring(0, 10);
-    return meetings.filter(m => m.date === formatted);
+    return filteredMeetings.filter(m => m.date === formatted);
   };
 
   const getWeekDays = useMemo(() => {
@@ -854,6 +919,26 @@ export const AgendaComercial: React.FC<AgendaComercialProps> = ({
             {/* Left side: main Calendário (8 columns) */}
             <div className="lg:col-span-8 space-y-6">
             
+              {/* Real-time search bar */}
+              <div id="agenda-search-bar" className="bg-[#151520] p-4 rounded-2xl border border-[#2A2A3A] flex items-center gap-3 shadow-lg relative group transition-all duration-300 focus-within:border-[#8A2BE2] focus-within:shadow-[0_0_15px_rgba(138,43,226,0.15)]">
+                <Search className="w-5 h-5 text-slate-400 group-focus-within:text-[#B026FF] transition-colors" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Busca rápida de compromissos por empresa ou evento..."
+                  className="bg-transparent border-none outline-none text-sm text-white w-full placeholder-slate-500 font-medium"
+                />
+                {searchTerm && (
+                  <button 
+                    onClick={() => setSearchTerm('')} 
+                    className="bg-[#2A2A3A]/60 hover:bg-[#34344A] text-slate-400 hover:text-white p-1 rounded-lg transition-all"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            
             {/* Header filters and controls */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-[#151520] p-4 rounded-2xl border border-[#2A2A3A]">
               
@@ -949,21 +1034,25 @@ export const AgendaComercial: React.FC<AgendaComercialProps> = ({
 
                           {/* List meetings inside cell */}
                           <div className="space-y-1 mt-2">
-                            {cellMeets.slice(0, 3).map(m => (
-                              <div 
-                                key={m.id}
-                                onClick={() => openEditMeetingModal(m)}
-                                className={`p-1 px-1.5 rounded-md text-[10px] font-bold line-clamp-1 truncate cursor-pointer transition-colors ${
-                                  m.status === 'Realizado' 
-                                    ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20'
-                                    : m.status === 'Cancelado'
-                                      ? 'bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20'
-                                      : 'bg-[#8A2BE2]/10 border border-[#8A2BE2]/25 text-[#B026FF] hover:bg-[#8A2BE2]/20'
-                                }`}
-                              >
-                                {m.time} {m.company}
-                              </div>
-                            ))}
+                             {cellMeets.slice(0, 3).map(m => (
+                               <div 
+                                 key={m.id}
+                                 onClick={() => openEditMeetingModal(m)}
+                                 className={`p-1 px-1.5 rounded-md text-[10px] font-bold line-clamp-1 truncate cursor-pointer transition-colors ${
+                                   m.status === 'Realizado' 
+                                     ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/10'
+                                     : m.status === 'Cancelado'
+                                       ? 'bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/10'
+                                       : m.status === 'Confirmado'
+                                         ? 'bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 hover:bg-indigo-500/10'
+                                         : m.status === 'Reagendado'
+                                           ? 'bg-pink-500/10 border border-pink-500/20 text-pink-400 hover:bg-pink-500/10'
+                                           : 'bg-[#8A2BE2]/10 border border-[#8A2BE2]/25 text-[#B026FF] hover:bg-[#8A2BE2]/20'
+                                 }`}
+                               >
+                                 {m.time} {m.company}
+                               </div>
+                             ))}
                             {cellMeets.length > 3 && (
                               <div className="text-[9px] text-[#D946EF] font-black pl-1">
                                 +{cellMeets.length - 3} mais
@@ -1003,16 +1092,51 @@ export const AgendaComercial: React.FC<AgendaComercialProps> = ({
                             <div
                               key={m.id}
                               onClick={() => openEditMeetingModal(m)}
-                              className="bg-[#1C1C29] border border-[#2A2A3A] hover:border-[#8A2BE2] p-2.5 rounded-xl transition-all cursor-pointer space-y-2"
+                              className="bg-[#1C1C29] border border-[#2A2A3A] hover:border-[#8A2BE2] p-2.5 rounded-xl transition-all cursor-pointer space-y-2 group/card"
                             >
                               <div className="flex items-center justify-between gap-1">
                                 <span className="text-[10px] font-extrabold font-mono text-[#D946EF]">{m.time}</span>
-                                <span className={`text-[8px] px-1.5 py-0.2 rounded font-extrabold uppercase ${
-                                  m.status === 'Realizado' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-blue-500/20 text-blue-400'
+                                <span className={`text-[8px] px-1.5 py-0.5 rounded font-extrabold uppercase tracking-wider ${
+                                  m.status === 'Realizado' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                                  m.status === 'Cancelado' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' :
+                                  m.status === 'Confirmado' ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30' :
+                                  m.status === 'Reagendado' ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30' :
+                                  'bg-amber-500/20 text-amber-400 border border-amber-500/30'
                                 }`}>{m.status}</span>
                               </div>
                               <h4 className="font-extrabold text-white text-xs line-clamp-1">{m.title}</h4>
                               <p className="text-[10px] text-slate-400 font-bold">{m.company}</p>
+                              
+                              {/* Quick status action buttons on hover / card bottom */}
+                              <div className="flex items-center justify-between gap-1 pt-1.5 border-t border-[#2A2A3A]/65 mt-2 opacity-0 group-hover/card:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                                {m.status !== 'Confirmado' && m.status !== 'Realizado' && (
+                                  <button 
+                                    onClick={() => handleUpdateMeetingStatus(m.id, 'Confirmado')}
+                                    className="text-[8px] font-black text-indigo-400 hover:text-white bg-[#151522] hover:bg-indigo-500/35 border border-indigo-500/20 px-1 py-0.5 rounded transition-all"
+                                    title="Confirmar Compromisso"
+                                  >
+                                    Confirmar
+                                  </button>
+                                )}
+                                {m.status !== 'Realizado' && (
+                                  <button 
+                                    onClick={() => handleUpdateMeetingStatus(m.id, 'Realizado')}
+                                    className="text-[8px] font-black text-emerald-400 hover:text-white bg-[#151522] hover:bg-emerald-500/35 border border-emerald-500/20 px-1 py-0.5 rounded transition-all"
+                                    title="Marcar como Realizado"
+                                  >
+                                    Realizar
+                                  </button>
+                                )}
+                                {m.status !== 'Cancelado' && (
+                                  <button 
+                                    onClick={() => handleUpdateMeetingStatus(m.id, 'Cancelado')}
+                                    className="text-[8px] font-black text-rose-400 hover:text-white bg-[#151522] hover:bg-rose-500/35 border border-rose-500/20 px-1 py-0.5 rounded transition-all"
+                                    title="Cancelar Compromisso"
+                                  >
+                                    Cancelar
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           ))}
                           {cellMeets.length === 0 && (
@@ -1074,16 +1198,49 @@ export const AgendaComercial: React.FC<AgendaComercialProps> = ({
                               <span>Entrar no Meet</span>
                             </a>
                           )}
+                          <div className="flex items-center gap-1.5 bg-[#171725]/60 p-1 rounded-xl border border-[#2A2A3A]/80">
+                            {m.status !== 'Confirmado' && m.status !== 'Realizado' && (
+                              <button
+                                onClick={() => handleUpdateMeetingStatus(m.id, 'Confirmado')}
+                                className="text-[10px] font-black text-indigo-400 hover:text-white bg-indigo-500/10 hover:bg-indigo-500/20 px-2 py-1 rounded-lg transition-all"
+                                title="Confirmar Compromisso"
+                              >
+                                Confirmar
+                              </button>
+                            )}
+                            {m.status !== 'Realizado' && (
+                              <button
+                                onClick={() => handleUpdateMeetingStatus(m.id, 'Realizado')}
+                                className="text-[10px] font-black text-emerald-400 hover:text-white bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-1 rounded-lg transition-all"
+                                title="Marcar como Realizado"
+                              >
+                                Realizar
+                              </button>
+                            )}
+                            {m.status !== 'Cancelado' && (
+                              <button
+                                onClick={() => handleUpdateMeetingStatus(m.id, 'Cancelado')}
+                                className="text-[10px] font-black text-rose-400 hover:text-white bg-rose-500/10 hover:bg-rose-500/20 px-2 py-1 rounded-lg transition-all"
+                                title="Cancelar Compromisso"
+                              >
+                                Cancelar
+                              </button>
+                            )}
+                          </div>
                           <span className={`text-xs px-3 py-1 rounded-full font-black uppercase ${
                             m.status === 'Realizado' 
                               ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                              : m.status === 'Agendado' 
-                                ? 'bg-[#8A2BE2]/10 text-[#B026FF] border border-[#8A2BE2]/20'
-                                : 'bg-[#2A2A3A] text-slate-300'
+                              : m.status === 'Cancelado' 
+                                ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                                : m.status === 'Confirmado' 
+                                  ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'
+                                  : m.status === 'Reagendado' 
+                                    ? 'bg-pink-500/10 text-pink-400 border border-pink-500/20'
+                                    : 'bg-[#8A2BE2]/10 text-[#B026FF] border border-[#8A2BE2]/20'
                           }`}>
                             {m.status}
                           </span>
-                          <button onClick={() => openEditMeetingModal(m)} className="text-slate-450 hover:text-white transition-all">
+                          <button onClick={() => openEditMeetingModal(m)} className="text-slate-450 hover:text-white transition-all p-1 hover:bg-[#2A2A3A] rounded-lg">
                             <Edit className="w-4 h-4" />
                           </button>
                         </div>
@@ -1109,12 +1266,12 @@ export const AgendaComercial: React.FC<AgendaComercialProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#2A2A3A] text-xs">
-                    {meetings.length === 0 ? (
+                    {filteredMeetings.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="py-12 text-center text-slate-500 italic">Nenhum compromisso comercial na agenda.</td>
                       </tr>
                     ) : (
-                      meetings.map(m => (
+                      filteredMeetings.map(m => (
                         <tr key={m.id} className="hover:bg-[#151525]/30 transition-colors">
                           <td className="py-3.5 px-4">
                             <div className="font-extrabold text-white text-sm">{m.company}</div>
@@ -1139,6 +1296,7 @@ export const AgendaComercial: React.FC<AgendaComercialProps> = ({
                               m.status === 'Realizado' ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20' :
                               m.status === 'Cancelado' ? 'bg-rose-500/15 text-rose-400 border border-rose-500/20' :
                               m.status === 'Confirmado' ? 'bg-indigo-500/15 text-indigo-400 border border-indigo-500/20' :
+                              m.status === 'Reagendado' ? 'bg-pink-500/15 text-pink-400 border border-pink-500/20' :
                               'bg-amber-500/15 text-amber-400 border border-amber-500/20'
                             }`}>
                               {m.status}
@@ -1146,6 +1304,35 @@ export const AgendaComercial: React.FC<AgendaComercialProps> = ({
                           </td>
                           <td className="py-3.5 px-4 text-right">
                             <div className="flex items-center justify-end gap-2">
+                              {/* Quick Status actions */}
+                              {m.status !== 'Confirmado' && m.status !== 'Realizado' && (
+                                <button
+                                  onClick={() => handleUpdateMeetingStatus(m.id, 'Confirmado')}
+                                  className="text-[10px] font-black text-indigo-400 hover:text-white bg-indigo-500/10 hover:bg-indigo-500/20 px-2 py-1.5 rounded-lg transition-all border border-indigo-500/20"
+                                  title="Confirmar"
+                                >
+                                  Confirmar
+                                </button>
+                              )}
+                              {m.status !== 'Realizado' && (
+                                <button
+                                  onClick={() => handleUpdateMeetingStatus(m.id, 'Realizado')}
+                                  className="text-[10px] font-black text-emerald-400 hover:text-white bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-1.5 rounded-lg transition-all border border-emerald-500/20"
+                                  title="Concluir"
+                                >
+                                  Realizar
+                                </button>
+                              )}
+                              {m.status !== 'Cancelado' && (
+                                <button
+                                  onClick={() => handleUpdateMeetingStatus(m.id, 'Cancelado')}
+                                  className="text-[10px] font-black text-rose-400 hover:text-white bg-rose-500/10 hover:bg-rose-500/20 px-2 py-1.5 rounded-lg transition-all border border-rose-500/20"
+                                  title="Cancelar"
+                                >
+                                  Cancelar
+                                </button>
+                              )}
+
                               {m.status === 'Realizado' && (
                                 <button
                                   onClick={() => handleGenerateProposalWithIA(m)}
@@ -1156,10 +1343,10 @@ export const AgendaComercial: React.FC<AgendaComercialProps> = ({
                                   <span>Proposta IA</span>
                                 </button>
                               )}
-                              <button onClick={() => openEditMeetingModal(m)} className="text-slate-400 hover:text-white">
+                              <button onClick={() => openEditMeetingModal(m)} className="text-slate-400 hover:text-white p-1 hover:bg-[#2A2A3A] rounded-lg transition-all" title="Editar">
                                 <Edit className="w-4 h-4" />
                               </button>
-                              <button onClick={() => handleDeleteMeeting(m.id)} className="text-slate-400 hover:text-rose-500">
+                              <button onClick={() => handleDeleteMeeting(m.id)} className="text-slate-400 hover:text-rose-500 p-1 hover:bg-[#2A2A3A] rounded-lg transition-all" title="Excluir">
                                 <Trash2 className="w-4 h-4" />
                               </button>
                             </div>
