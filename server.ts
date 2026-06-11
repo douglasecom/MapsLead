@@ -414,6 +414,34 @@ async function getOrCreateUsage(userId: string, userPlan: string) {
   else if (normalizedPlan === "pro") planLimit = 1000;
   else if (normalizedPlan === "agência" || normalizedPlan === "agency") planLimit = 5000;
   else if (normalizedPlan === "enterprise") planLimit = 10000;
+  else if (normalizedPlan === "unlimited" || normalizedPlan === "ilimitado") planLimit = 999999;
+
+  // Granular check to ensure douglasbateriacma@gmail.com or Administrator role are given unlimited (999999) limit on server
+  let isDevOrAdmin = userId === "douglasbateriacma@gmail.com";
+  try {
+    const userSnap = await getDoc(doc(db, "users", userId));
+    if (userSnap.exists()) {
+      const uData = userSnap.data();
+      const email = (uData.email || "").toLowerCase();
+      const role = (uData.role || "").toLowerCase();
+      const planName = (uData.plan || "").toLowerCase();
+      if (
+        email === "douglasbateriacma@gmail.com" || 
+        role === "administrador" ||
+        role === "admin" ||
+        planName === "unlimited" || 
+        planName === "ilimitado"
+      ) {
+        isDevOrAdmin = true;
+      }
+    }
+  } catch (err) {
+    console.warn("Could not load user profile in limit check:", err);
+  }
+
+  if (isDevOrAdmin) {
+    planLimit = 999999;
+  }
 
   if (usageSnap.exists()) {
     const data = usageSnap.data();

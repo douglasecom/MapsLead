@@ -44,6 +44,8 @@ export const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
   // AI proposal state
   const [proposalData, setProposalData] = useState<any>(null);
   const [isLoadingProposal, setIsLoadingProposal] = useState(false);
+  const [setupPriceOverride, setSetupPriceOverride] = useState<number>(997);
+  const [monthlyPriceOverride, setMonthlyPriceOverride] = useState<number>(497);
 
   // Currency helper
   const formatCurrency = (val: number) => {
@@ -75,6 +77,8 @@ export const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
       if (!response.ok) throw new Error("Erro na rede do servidor");
       const data = await response.json();
       setProposalData(data);
+      setSetupPriceOverride(data.totalSetup || 0);
+      setMonthlyPriceOverride(data.totalMonthly || 0);
       if (isRegen) {
         triggerNotification("Sua Proposta Comercial foi gerada e atualizada com sucesso pela IA!", "success");
       }
@@ -88,7 +92,7 @@ export const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
       const dummySetup = siteScore < 70 ? (companySize === "Grande" ? 3497 : companySize === "Média" ? 1997 : 997) : 0;
       const dummyMonthly = (seoScore < 70 ? (companySize === "Grande" ? 1497 : companySize === "Média" ? 997 : 497) : 497) + (instagramScore === 0 ? 797 : 0);
 
-      setProposalData({
+      const dummyObj = {
         relatorioExecutivo: `Análise de posicionamento desenvolvida com exclusividade para a empresa ${empresa}. Identificamos um prestígio considerável em ${cidade}, consolidado pela média de ${currentRating}★ com base em ${currentReviews} avaliações voluntárias. No entanto, sua presença web apresenta gaps que limitam a captura continuada de clientes.`,
         diagnostico: `PONTOS FORTES:\n- Excelente avaliação média local com destaque em satisfação do público (${currentRating}★).\n- Fidelização de marca comprovada por ${currentReviews} avaliações autênticas.\n\nOPORTUNIDADES DETALHADAS:\n${siteScore < 70 ? "- Ausência de canal institucional express de carregamento rápido (Landing Page).\n" : ""}${seoScore < 40 ? "- Baixo ranqueamento regional para termos orgânicos chaves.\n" : ""}- Ausência de automação de pré-agendamento e CRM de vendas.`,
         impactoFinanceiro: `Considerando o fluxo de pesquisa mensal do segmento de ${segmento} na região de ${cidade}, estima-se que a empresa perca de 30% a 55% das intenções reais de compra devido à falta de botões de conversão e página otimizada. Isso representa um desvio financeiro estimado entre R$ 3.000,00 e R$ 12.000,00 por mês.`,
@@ -111,7 +115,11 @@ export const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
           semana4: "Treinamento breve do time de atendimento, indexação e ativação comercial."
         },
         fechamento: "Estamos inteiramente prontos para implantar sua esteira comercial e alavancar seus agendamentos no primeiro dia útil útil."
-      });
+      };
+
+      setProposalData(dummyObj);
+      setSetupPriceOverride(dummyObj.totalSetup);
+      setMonthlyPriceOverride(dummyObj.totalMonthly);
     } finally {
       setIsLoadingProposal(false);
     }
@@ -136,8 +144,8 @@ export const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
     const summaryText = `Proposta Comercial Premium - ${empresa}
 - Consultoria: AdsHive Prospect (Slogan: INTELIGÊNCIA DE VENDAS)
 - Cidade: ${cidade}
-- Investimento Único Implantação: ${formatCurrency(proposalData.totalSetup || 0)}
-- Recorrência Mensal Suporte/SEO: ${formatCurrency(proposalData.totalMonthly || 0)}
+- Investimento Único Implantação: ${formatCurrency(setupPriceOverride)}
+- Recorrência Mensal Suporte/SEO: ${formatCurrency(monthlyPriceOverride)}
 
 Plano de Ação Sugerido:
 1. Curto Prazo: ${proposalData.planoDeAcao?.curtoPrazo}
@@ -320,21 +328,25 @@ Plano de Ação Sugerido:
                             </tr>
                           </thead>
                           <tbody>
-                            {proposalData.investimentos?.map((inv: any, idx: number) => (
-                              <tr key={idx} className="border-b hover:bg-slate-50 text-[11px]">
-                                <td className="p-2.5 font-bold text-slate-900">{inv.servico}</td>
-                                <td className="p-2.5">
-                                  <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
-                                    inv.tipo === 'Setup' ? 'bg-indigo-100 text-indigo-800' : 'bg-emerald-100 text-emerald-800'
-                                  }`}>
-                                    {inv.tipo || "Mensal"}
-                                  </span>
-                                </td>
-                                <td className="p-2.5 text-right font-mono font-bold text-slate-800">
-                                  {formatCurrency(inv.valor)}
-                                </td>
-                              </tr>
-                            ))}
+                            {proposalData.investimentos?.map((inv: any, idx: number) => {
+                              const isSetupItem = inv.tipo === 'Setup';
+                              const displayVal = isSetupItem ? setupPriceOverride : monthlyPriceOverride;
+                              return (
+                                <tr key={idx} className="border-b hover:bg-slate-50 text-[11px]">
+                                  <td className="p-2.5 font-bold text-slate-900">{inv.servico}</td>
+                                  <td className="p-2.5">
+                                    <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
+                                      inv.tipo === 'Setup' ? 'bg-indigo-100 text-indigo-800' : 'bg-emerald-100 text-emerald-800'
+                                    }`}>
+                                      {inv.tipo || "Mensal"}
+                                    </span>
+                                  </td>
+                                  <td className="p-2.5 text-right font-mono font-bold text-slate-800">
+                                    {formatCurrency(displayVal)}
+                                  </td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>
@@ -343,14 +355,14 @@ Plano de Ação Sugerido:
                         <div>
                           <span className="text-slate-400 font-bold block uppercase text-[9px]">Taxa de Implantação Básica (Setup Único)</span>
                           <span className="text-xl font-black text-slate-900 font-mono block mt-0.5">
-                            {formatCurrency(proposalData.totalSetup || 0)}
+                            {formatCurrency(setupPriceOverride)}
                           </span>
                           <p className="text-slate-450 block text-[9px] mt-0.5">Pagamento facilitado em boleto ou cartão</p>
                         </div>
                         <div className="border-t sm:border-y-0 sm:border-l sm:pt-0 pt-4 sm:pl-4">
                           <span className="text-indigo-600 font-bold block uppercase text-[9px]">Acompanhamento Local Recorrente (Mensal)</span>
                           <span className="text-lg font-black text-indigo-650 font-mono block mt-0.5">
-                            {formatCurrency(proposalData.totalMonthly || 0)} <span className="text-xs font-semibold text-slate-400">/mês</span>
+                            {formatCurrency(monthlyPriceOverride)} <span className="text-xs font-semibold text-slate-400">/mês</span>
                           </span>
                           <p className="text-slate-450 block text-[9px] mt-0.5">Hospedagem, suporte técnico ativo e monitoramento de SEO</p>
                         </div>
@@ -460,7 +472,7 @@ Plano de Ação Sugerido:
                 <div className="space-y-2">
                   <strong className="text-slate-900 block uppercase">Cláusula Terceira — Dos Valores e Cobrança</strong>
                   <p className="text-slate-650 leading-normal font-medium">
-                    Como contraprestação pelos serviços exclusivos de implantação, a CONTRATANTE investirá a taxa única de <strong>{formatCurrency(proposalData?.totalSetup || 997)}</strong>. As ações de acompanhamento, monitoramento de métricas locais de GMB e manutenção ativa de suporte de WhatsApp possuirão mensalidade no valor de <strong>{formatCurrency(proposalData?.totalMonthly || 497)} /mês</strong>, faturada de maneira recorrente via PIX ou Boleto no primeiro dia do ciclo do serviço.
+                    Como contraprestação pelos serviços exclusivos de implantação, a CONTRATANTE investirá a taxa única de <strong>{formatCurrency(setupPriceOverride)}</strong>. As ações de acompanhamento, monitoramento de métricas locais de GMB e manutenção ativa de suporte de WhatsApp possuirão mensalidade no valor de <strong>{formatCurrency(monthlyPriceOverride)} /mês</strong>, faturada de maneira recorrente via PIX ou Boleto no primeiro dia do ciclo do serviço.
                   </p>
                 </div>
 
@@ -813,6 +825,64 @@ Plano de Ação Sugerido:
                     </select>
                   </div>
 
+                  {/* Custom System Price Override Section */}
+                  <div className="bg-amber-500/10 border-2 border-amber-500/30 p-4 rounded-2xl space-y-3 text-left shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-extrabold uppercase text-amber-800 tracking-wider flex items-center gap-1">
+                        💰 Ajustar Valores Comerciais
+                      </span>
+                      <span className="bg-amber-100 text-amber-800 text-[8px] px-1.5 py-0.5 rounded-md font-bold uppercase">
+                        Editável
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-2.5">
+                      {/* Valor de Implantação */}
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-slate-600 uppercase tracking-wide block">
+                          Valor de Implantação:
+                        </label>
+                        <div className="relative rounded-lg shadow-sm">
+                          <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center text-xs font-bold text-slate-400 pointer-events-none">
+                            R$
+                          </span>
+                          <input 
+                            type="number" 
+                            min="0"
+                            value={setupPriceOverride} 
+                            onChange={(e) => setSetupPriceOverride(Number(e.target.value))}
+                            className="w-full border border-slate-200 p-2 pl-8 rounded-lg font-mono font-black text-sm text-slate-900 bg-white focus:ring-2 focus:ring-amber-500 focus:border-amber-500 focus:outline-none transition-all"
+                            placeholder="0,00"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Valor Mensal */}
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-slate-600 uppercase tracking-wide block">
+                          Valor Mensal:
+                        </label>
+                        <div className="relative rounded-lg shadow-sm">
+                          <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center text-xs font-bold text-slate-400 pointer-events-none">
+                            R$
+                          </span>
+                          <input 
+                            type="number" 
+                            min="0"
+                            value={monthlyPriceOverride} 
+                            onChange={(e) => setMonthlyPriceOverride(Number(e.target.value))}
+                            className="w-full border border-slate-200 p-2 pl-8 rounded-lg font-mono font-black text-sm text-slate-900 bg-white focus:ring-2 focus:ring-amber-500 focus:border-amber-500 focus:outline-none transition-all"
+                            placeholder="0,00"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="text-[9px] text-slate-500 font-medium leading-relaxed">
+                      Ao modificar estes campos, os valores sugeridos pela IA são atualizados instantaneamente na <strong className="text-slate-750">Proposta Comercial</strong> e no <strong className="text-slate-750">Contrato B2B</strong>.
+                    </p>
+                  </div>
+
                   <div className="border-t pt-3 space-y-3">
                     <span className="text-[9px] text-slate-400 font-bold block uppercase tracking-wider">Pontuações de Auditoria (0 a 100):</span>
                     
@@ -980,13 +1050,13 @@ Plano de Ação Sugerido:
               <div className="flex justify-between items-center text-xs font-semibold border-b pb-2">
                 <span className="text-slate-500">Taxa Implantação (Setup):</span>
                 <span className="text-slate-950 font-mono font-bold">
-                  {proposalData ? formatCurrency(proposalData.totalSetup || 0) : "R$ 997,00"}
+                  {formatCurrency(setupPriceOverride)}
                 </span>
               </div>
               <div className="flex justify-between items-center text-xs font-semibold border-b pb-2">
                 <span className="text-slate-500">Recorrência (Retainer):</span>
                 <span className="text-indigo-600 font-mono font-bold">
-                  {proposalData ? formatCurrency(proposalData.totalMonthly || 0) : "R$ 497,00"} <span className="text-[10px] text-slate-400">/mês</span>
+                  {formatCurrency(monthlyPriceOverride)} <span className="text-[10px] text-slate-400">/mês</span>
                 </span>
               </div>
               <div className="flex justify-between items-center text-[11px] font-semibold">
