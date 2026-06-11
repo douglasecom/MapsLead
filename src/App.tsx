@@ -290,13 +290,24 @@ export default function App() {
 
   useEffect(() => {
     fetch("/api/config/maps")
-      .then(res => res.json())
+      .then(async res => {
+        if (!res.ok) {
+          throw new Error(`Google Maps API server response status not OK: ${res.status}`);
+        }
+        const contentType = res.headers.get("content-type") || "";
+        if (!contentType.includes("application/json")) {
+          throw new Error("Local server initialized with non-JSON format (Vite proxy fallback).");
+        }
+        return res.json();
+      })
       .then(data => {
         if (data && data.hasKey) {
           setMapsConfig(data);
         }
       })
-      .catch(err => console.error("Erro de configuração do Google Maps:", err));
+      .catch(err => {
+        console.warn("[GOOGLE MAPS CONFIG SANITIZATION DEBUG - BENIGN ON STARTUP]", err.message);
+      });
   }, []);
   
   // Freemium pricing blocker configurations
@@ -730,13 +741,30 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
         })
       });
 
-      const data = await response.json();
-      if (response.ok) {
-        setCustomAIResponseOutput(data.text);
-        triggerNotification("Resposta estruturada com sucesso pela IA!", "success");
-      } else {
-        triggerNotification(data.error || "Ocorreu uma falha ao contatar o AdsHive AI.", "warning");
+      const contentType = response.headers.get("content-type") || "";
+      if (!response.ok) {
+        let errorMsg = "Ocorreu uma falha ao contatar o AdsHive AI.";
+        if (contentType.includes("application/json")) {
+          const errData = await response.json();
+          errorMsg = errData.error || errorMsg;
+        } else {
+          const textErr = await response.text();
+          if (textErr.trim().length > 0) {
+            errorMsg = textErr.substring(0, 200);
+          }
+        }
+        triggerNotification(errorMsg, "warning");
+        return;
       }
+
+      if (!contentType.includes("application/json")) {
+        triggerNotification("Resposta do servidor em formato inválido.", "warning");
+        return;
+      }
+
+      const data = await response.json();
+      setCustomAIResponseOutput(data.text);
+      triggerNotification("Resposta estruturada com sucesso pela IA!", "success");
     } catch (err) {
       console.error("AI client execution failed:", err);
       triggerNotification("Erro de conexão ao acessar os servidores de IA.", "warning");
@@ -776,11 +804,26 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
         })
       });
       
-      const data = await response.json();
-      
+      const contentType = response.headers.get("content-type") || "";
       if (!response.ok) {
-        throw new Error(data.error || `HTTP ${response.status} - Erro na resposta do servidor`);
+        let errorMsg = `HTTP ${response.status} - Erro de processamento na pesquisa`;
+        if (contentType.includes("application/json")) {
+          const errData = await response.json();
+          errorMsg = errData.error || errorMsg;
+        } else {
+          const textErr = await response.text();
+          if (textErr.trim().length > 0) {
+            errorMsg = textErr.substring(0, 300);
+          }
+        }
+        throw new Error(errorMsg);
       }
+
+      if (!contentType.includes("application/json")) {
+        throw new Error("O servidor retornou um formato de resposta desconhecido (não-JSON). Entre em contato se o problema persistir.");
+      }
+
+      const data = await response.json();
 
       if (data.leads && Array.isArray(data.leads)) {
         // Map elements with IDs and state
