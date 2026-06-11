@@ -31,13 +31,12 @@ export function getApiUrl(path: string): string {
 export async function logResponseDebug(response: Response) {
   try {
     const cloned = response.clone();
-    console.log("[API AUDIT LOG] HTTP Status:", response.status);
-    console.log("[API AUDIT LOG] URL:", response.url);
-    console.log("[API AUDIT LOG] Content-Type:", response.headers.get('content-type'));
-    const textBody = await cloned.text();
-    console.log("[API AUDIT LOG] Raw body response length:", textBody.length);
-    console.log("[API AUDIT LOG] Response body:", textBody);
+    console.log(response.status);
+    console.log(response.url);
+    console.log(response.headers.get('content-type'));
+    const text = await cloned.text();
+    console.log(text);
   } catch (err) {
-    console.warn("[API AUDIT LOG ERROR] Failed to serialize debug log details", err);
+    console.warn("[API AUDIT LOG ERROR] Failed to serialize debug logs:", err);
   }
 }

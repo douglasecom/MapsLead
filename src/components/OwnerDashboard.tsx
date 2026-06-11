@@ -13,6 +13,7 @@ import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, 
   Tooltip, BarChart, Bar, Legend, PieChart, Pie, Cell, LineChart, Line
 } from "recharts";
+import { ApiConfigPanel } from "./ApiConfigPanel";
 
 interface OwnerDashboardProps {
   session: UserSession | null;
@@ -23,7 +24,7 @@ interface OwnerDashboardProps {
 export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ session, triggerNotification, onClose }) => {
   // Tab control
   const [activeSubTab, setActiveSubTab] = useState<
-    "overview" | "users" | "plans" | "credits" | "subscriptions" | "asaas" | "audit" | "metrics" | "support" | "marketing" | "settings" | "firebase" | "security"
+    "overview" | "users" | "plans" | "credits" | "subscriptions" | "asaas" | "audit" | "metrics" | "support" | "marketing" | "settings" | "firebase" | "security" | "mapsConfig"
   >("overview");
 
   // Local data states synced with Firestore
@@ -744,7 +745,8 @@ export const OwnerDashboard: React.FC<OwnerDashboardProps> = ({ session, trigger
           { id: "marketing", label: "Mkt & Campanhas", icon: Share2 },
           { id: "settings", label: "Config Globais", icon: Settings },
           { id: "firebase", label: "Backup & BD", icon: Database },
-          { id: "security", label: "Segurança", icon: Lock }
+          { id: "security", label: "Segurança", icon: Lock },
+          { id: "mapsConfig", label: "APIs & Google Maps", icon: Key }
         ].map((tab) => {
           const IconComp = tab.icon;
           const isSelected = activeSubTab === tab.id;
@@ -2640,6 +2642,13 @@ Emitido em: ${new Date().toLocaleString()}
             </div>
           </div>
 
+        </div>
+      )}
+
+      {/* TAB 14: GOOGLE MAPS & CLOUD CREDENTIALS AND AUDIT */}
+      {activeSubTab === "mapsConfig" && (
+        <div className="animate-in fade-in duration-200">
+          <ApiConfigPanel triggerNotification={triggerNotification} />
         </div>
       )}
 

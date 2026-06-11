@@ -87,36 +87,122 @@ export const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
     } catch (err: any) {
       console.error(err);
       triggerNotification("Erro ao conectar com servidor de propostas. Exibindo proposta tática local.", "info");
-      
-      // Local fallback calculation if server fails or is cold
+        // Local fallback calculation if server fails or is cold (AdsHive Official table)
       const estLeads = companySize === "Grande" ? "+150 a +350" : companySize === "Média" ? "+60 a +150" : "+25 a +60";
       const estMeetings = companySize === "Grande" ? "+40 a +90" : companySize === "Média" ? "+15 a +40" : "+8 a +18";
-      const dummySetup = siteScore < 70 ? (companySize === "Grande" ? 3497 : companySize === "Média" ? 1997 : 997) : 0;
-      const dummyMonthly = (seoScore < 70 ? (companySize === "Grande" ? 1497 : companySize === "Média" ? 997 : 497) : 497) + (instagramScore === 0 ? 797 : 0);
+      
+      const localSetupServices: Array<{ servico: string; tipo: 'Setup' | 'Mensal'; valor: number }> = [];
+      const siteSc = Number(siteScore) || 0;
+      const seoSc = Number(seoScore) || 0;
+      const instaSc = Number(instagramScore) || 0;
+      const fbSc = Number(facebookScore) || 0;
+      const mapsSc = Number(mapsScore) || 0;
+      const gbpSc = Number(gbpScore) || 0;
+
+      const localOpportunities: string[] = [];
+      if (siteSc < 30) localOpportunities.push("Site");
+      if (siteSc >= 30 && siteSc < 70) localOpportunities.push("Novo Site");
+      if (instaSc < 55) localOpportunities.push("Instagram");
+      if (fbSc < 55) localOpportunities.push("Facebook");
+      if (seoSc < 70 || mapsSc < 70 || gbpSc < 70) localOpportunities.push("SEO Local");
+      if (siteSc >= 70 && siteSc < 80) localOpportunities.push("Landing Page");
+
+      const isDentalLead = (segmento || "").toLowerCase().includes("dentista") || 
+                           (segmento || "").toLowerCase().includes("odonto") || 
+                           (segmento || "").toLowerCase().includes("dental") ||
+                           (segmento || "").toLowerCase().includes("odontolog");
+
+      const hasAnuncios = announcedMeta || isDentalLead || (segmento || "").toLowerCase().includes("advogado") || (segmento || "").toLowerCase().includes("estetica");
+      if (hasAnuncios) localOpportunities.push("Tráfego");
+
+      const hasAuto = gbpSc < 80 || mapsSc < 80 || isDentalLead;
+      if (hasAuto) localOpportunities.push("Automação WhatsApp");
+
+      if (localOpportunities.length >= 3) {
+        localSetupServices.push({ servico: "👑 Plano Completo Presença Digital", tipo: "Setup", valor: 5997 });
+        localSetupServices.push({ servico: "👑 Plano Completo Presença Digital", tipo: "Mensal", valor: 2997 });
+      } else {
+        if (siteSc < 30) {
+          localSetupServices.push({ servico: "🌐 Site Institucional 5 Páginas", tipo: "Setup", valor: 3500 });
+          localSetupServices.push({ servico: "🌐 Site Institucional 5 Páginas", tipo: "Mensal", valor: 297 });
+        } else if (siteSc >= 30 && siteSc < 70) {
+          localSetupServices.push({ servico: "🌐 Desenvolvimento de Novo Site Institucional", tipo: "Setup", valor: 3500 });
+          localSetupServices.push({ servico: "🌐 Suporte & Hospedagem de Novo Site", tipo: "Mensal", valor: 297 });
+        } else if (siteSc >= 70 && siteSc < 80) {
+          localSetupServices.push({ servico: "🚀 Landing Page de Conversão", tipo: "Setup", valor: 1600 });
+          localSetupServices.push({ servico: "🚀 Suporte & Hospedagem LP", tipo: "Mensal", valor: 147 });
+        }
+
+        if (instaSc < 55 || fbSc < 55) {
+          localSetupServices.push({ servico: "📈 Gestão de Instagram", tipo: "Setup", valor: 500 });
+          localSetupServices.push({ servico: "📈 Gestão de Instagram", tipo: "Mensal", valor: 900 });
+        }
+
+        if (seoSc < 70 || mapsSc < 70 || gbpSc < 70) {
+          localSetupServices.push({ servico: "📍 SEO Local", tipo: "Setup", valor: 897 });
+          localSetupServices.push({ servico: "📍 SEO Local", tipo: "Mensal", valor: 897 });
+        }
+
+        if (hasAnuncios) {
+          if (announcedMeta) {
+            localSetupServices.push({ servico: "🎯 Tráfego Meta Ads", tipo: "Setup", valor: 997 });
+            localSetupServices.push({ servico: "🎯 Tráfego Meta Ads", tipo: "Mensal", valor: 1350 });
+          } else {
+            localSetupServices.push({ servico: "🔍 Tráfego Google Ads", tipo: "Setup", valor: 997 });
+            localSetupServices.push({ servico: "🔍 Tráfego Google Ads", tipo: "Mensal", valor: 1350 });
+          }
+        }
+
+        if (hasAuto) {
+          localSetupServices.push({ servico: "🤖 WhatsApp Business + Automação", tipo: "Setup", valor: 1200 });
+          localSetupServices.push({ servico: "🤖 WhatsApp Business + Automação", tipo: "Mensal", valor: 497 });
+        }
+      }
+
+      if (localSetupServices.length === 0) {
+        localSetupServices.push({ servico: "🚀 Landing Page de Conversão", tipo: "Setup", valor: 1600 });
+        localSetupServices.push({ servico: "🚀 Suporte & Hospedagem LP", tipo: "Mensal", valor: 147 });
+      }
+
+      const dummySetup = localSetupServices.filter(s => s.tipo === "Setup").reduce((sum, s) => sum + s.valor, 0);
+      const dummyMonthly = localSetupServices.filter(s => s.tipo === "Mensal").reduce((sum, s) => sum + s.valor, 0);
 
       const dummyObj = {
         relatorioExecutivo: `Análise de posicionamento desenvolvida com exclusividade para a empresa ${empresa}. Identificamos um prestígio considerável em ${cidade}, consolidado pela média de ${currentRating}★ com base em ${currentReviews} avaliações voluntárias. No entanto, sua presença web apresenta gaps que limitam a captura continuada de clientes.`,
-        diagnostico: `PONTOS FORTES:\n- Excelente avaliação média local com destaque em satisfação do público (${currentRating}★).\n- Fidelização de marca comprovada por ${currentReviews} avaliações autênticas.\n\nOPORTUNIDADES DETALHADAS:\n${siteScore < 70 ? "- Ausência de canal institucional express de carregamento rápido (Landing Page).\n" : ""}${seoScore < 40 ? "- Baixo ranqueamento regional para termos orgânicos chaves.\n" : ""}- Ausência de automação de pré-agendamento e CRM de vendas.`,
-        impactoFinanceiro: `Considerando o fluxo de pesquisa mensal do segmento de ${segmento} na região de ${cidade}, estima-se que a empresa perca de 30% a 55% das intenções reais de compra devido à falta de botões de conversão e página otimizada. Isso representa um desvio financeiro estimado entre R$ 3.000,00 e R$ 12.000,00 por mês.`,
+        diagnostico: `PONTOS FORTES:
+- Excelente avaliação média local com destaque em satisfação do público (${currentRating}★).
+- Fidelização de marca comprovada por ${currentReviews} avaliações autênticas.
+
+OPORTUNIDADES DETALHADAS:
+${siteSc < 30 ? "- Ausência de canal institucional express de carregamento rápido.\n" : ""}${siteSc >= 30 && siteSc < 70 ? "- Website atual fraco, lento ou que precisa ser reestruturado.\n" : ""}${instaSc < 55 ? "- Ausência de presença profissional madura e atualizada nas redes sociais (Instagram/Facebook).\n" : ""}${seoSc < 70 ? "- Baixo ranqueamento regional para termos orgânicos chaves.\n" : ""}- Ausência de funis inteligentes e automação de pré-agendamento por WhatsApp Business.`,
+        impactoFinanceiro: `Considerando o fluxo de pesquisa mensal do segmento de ${segmento} na região de ${cidade}, estima-se que a empresa perca de 30% a 55% das intenções reais de compra devido à falta de botões de conversão e página otimizada. Isso representa um desvio financeiro estimado entre R$ 4.000,00 e R$ 15.000,00 por mês.`,
         planoDeAcao: {
           curtoPrazo: "Higienização completa da ficha do Maps, atualização do FAQ e geração de QR Codes para incentivar novas avaliações no balcão.",
           medioPrazo: "Criação e indexação de Landing Page de alto rendimento configurada para celulares e integrada diretamente ao WhatsApp comercial.",
           longoPrazo: "Ativação de tráfego pago geolocalizado e implementação de automação de CRM AdsHive para rastrear todos os contatos sem perdas."
         },
-        investimentos: [
-          { servico: "SITE STARTER (Express Mobile-First)", tipo: "Setup", valor: dummySetup || 997 },
-          { servico: "SEO LOCAL START & Monitoramento", tipo: "Mensal", valor: dummyMonthly || 497 }
-        ],
-        totalSetup: dummySetup || 997,
-        totalMonthly: dummyMonthly || 497,
-        projecaoResultados: `- Incremento de cliques locais aproximado de 40% em 60 dias.\n- Captação esperada de ${estLeads} leads mensais via WhatsApp.\n- Fechamento imediato de ${estMeetings} novos agendamentos e vendas.`,
+        investimentos: localSetupServices,
+        totalSetup: dummySetup,
+        totalMonthly: dummyMonthly,
+        projecaoResultados: `Padrões de benefícios estratégicos e resultados estimados na região de ${cidade}:
+- Mais visibilidade local: aumento projetado de 45% a 80% em contatos, visualizações e cliques em até 90 dias.
+- Mais contatos e agendamentos: estimativa de ${estLeads} novos leads gerados mensalmente com taxa de engajamento acelerada.
+- Mais vendas qualificadas: conversão estimada de ${estMeetings} novos agendamentos/reuniões firmadas.
+- Mais autoridade digital: blindagem de marca sólida contra concorrentes diretos locais.`,
         cronograma: {
           semana1: "Planejamento estrutural, redação técnica da copy e briefing de fotos e logo.",
           semana2: "Criação de design, testes de velocidade de página e setup do Google Maps.",
           semana3: "Integração final do funil de conversão e botões diretos de atendimento.",
           semana4: "Treinamento breve do time de atendimento, indexação e ativação comercial."
         },
-        fechamento: "Estamos inteiramente prontos para implantar sua esteira comercial e alavancar seus agendamentos no primeiro dia útil útil."
+        fechamento: `Os Próximos Passos recomendados são:
+1. Aprovação da proposta comercial de implantação.
+2. Reunião estratégica de alinhamento com Douglas Pereira para definição de metas.
+3. Implantação e desenvolvimento de layouts corporativos.
+4. Entrega completa, treinamento de canal e publicação (Go Live).
+5. Acompanhamento continuado, relatórios recorrentes de tráfego e suporte.
+
+Com base no diagnóstico realizado, acreditamos que esta é a estratégia com maior potencial para gerar crescimento sustentável e novas oportunidades comerciais para a empresa.`
       };
 
       setProposalData(dummyObj);

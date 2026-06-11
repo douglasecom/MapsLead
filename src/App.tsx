@@ -60,6 +60,7 @@ import { LojaCreditos } from "./components/LojaCreditos";
 import { Financeiro } from "./components/Financeiro";
 import { AdminCredits } from "./components/AdminCredits";
 import { OwnerDashboard } from "./components/OwnerDashboard";
+import { SystemHealthDashboard } from "./components/SystemHealthDashboard";
 import { collection, getDocs, setDoc, deleteDoc, doc, onSnapshot, getDoc } from "firebase/firestore";
 import { db } from "./firebase";
 
@@ -121,7 +122,7 @@ export default function App() {
   };
 
   // Navigation & View Mode
-  const [activeTab, setActiveTab] = useState<"inicio" | "pesquisa" | "leads" | "oportunidades" | "ai_gerador" | "admin" | "crm" | "radar" | "comercial" | "loja_creditos" | "financeiro" | "dashboard-owner" | "agenda">("inicio");
+  const [activeTab, setActiveTab] = useState<"inicio" | "pesquisa" | "leads" | "oportunidades" | "ai_gerador" | "admin" | "crm" | "radar" | "comercial" | "loja_creditos" | "financeiro" | "dashboard-owner" | "agenda" | "system-health">("inicio");
 
   // Public Booking State for Calendly Integrado
   const [isPublicCalendly, setIsPublicCalendly] = useState(false);
@@ -198,6 +199,7 @@ export default function App() {
     loja_creditos: "/loja-creditos",
     financeiro: "/financeiro",
     "dashboard-owner": "/dashboard-owner",
+    "system-health": "/owner/system-health",
     admin: "/admin"
   };
 
@@ -215,6 +217,7 @@ export default function App() {
     "/loja-creditos": "loja_creditos",
     "/financeiro": "financeiro",
     "/dashboard-owner": "dashboard-owner",
+    "/owner/system-health": "system-health",
     "/admin": "admin"
   };
 
@@ -231,9 +234,13 @@ export default function App() {
         }
       } else {
         // Authenticated routing
-        if (pName === "/owner" || pName === "/admin" || pName === "/dashboard-owner") {
+        if (pName === "/owner" || pName === "/admin" || pName === "/dashboard-owner" || pName === "/owner/system-health") {
           if (session.email?.toLowerCase() === "douglasbateriacma@gmail.com") {
-            setActiveTab("dashboard-owner");
+            if (pName === "/owner/system-health") {
+              setActiveTab("system-health");
+            } else {
+              setActiveTab("dashboard-owner");
+            }
           } else {
             triggerNotification("Acesso negado: essa rota administrativa é exclusiva para o Owner.", "warning");
             setActiveTab("inicio");
@@ -652,7 +659,8 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
       } else {
         const initUsage = async () => {
           try {
-            const resp = await fetch(`/api/ai/usage/${session.id}?plan=${encodeURIComponent(session?.plan || 'Gratuito')}`);
+            const resp = await fetch(getApiUrl(`/api/ai/usage/${session.id}?plan=${encodeURIComponent(session?.plan || 'Gratuito')}`));
+            await logResponseDebug(resp);
             if (resp.ok) {
               const uData = await resp.json();
               setAiUsageStats({
@@ -1078,9 +1086,13 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
               triggerNotification(`Seja bem-vindo de volta, ${sess.name}! Perfil [${sess.role}] ativo com sucesso.`, "success");
               
               const currentPath = window.location.pathname;
-              if (currentPath === "/owner" || currentPath === "/admin" || currentPath === "/dashboard-owner") {
+              if (currentPath === "/owner" || currentPath === "/admin" || currentPath === "/dashboard-owner" || currentPath === "/owner/system-health") {
                 if (sess.email?.toLowerCase() === "douglasbateriacma@gmail.com") {
-                  setActiveTab("dashboard-owner");
+                  if (currentPath === "/owner/system-health") {
+                    setActiveTab("system-health");
+                  } else {
+                    setActiveTab("dashboard-owner");
+                  }
                 } else {
                   setActiveTab("inicio");
                   window.history.replaceState({}, "", "/dashboard");
@@ -1384,20 +1396,31 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
             </button>
 
             {session?.email?.toLowerCase() === "douglasbateriacma@gmail.com" && (
-              <button 
-                id="sidebar-tab-owner"
-                onClick={() => setActiveTab("dashboard-owner")} 
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg font-bold text-sm transition-all text-left ${
-                  activeTab === "dashboard-owner" 
-                    ? "bg-[#C93CFF]/10 text-[#C93CFF] border-l-4 border-[#C93CFF] font-black" 
-                    : themeMode === "light"
-                      ? "text-rose-600 hover:bg-rose-50"
-                      : "text-rose-400 hover:bg-[#1C1C26]"
-                }`}
-              >
-                <ShieldAlert className="w-5 h-5 shrink-0 text-red-500 animate-pulse" />
-                <span>Painel Owner Master</span>
-              </button>
+              <>
+                <button 
+                  id="sidebar-tab-owner"
+                  onClick={() => setActiveTab("dashboard-owner")} 
+                  className={`flex items-center gap-3 px-4 py-3 rounded-lg font-bold text-sm transition-all text-left ${
+                    activeTab === "dashboard-owner" 
+                      ? "bg-[#C93CFF]/10 text-[#C93CFF] border-l-4 border-[#C93CFF] font-black" 
+                      : themeMode === "light"
+                        ? "text-rose-600 hover:bg-rose-50"
+                        : "text-rose-400 hover:bg-[#1C1C26]"
+                  }`}
+                >
+                  <ShieldAlert className="w-5 h-5 shrink-0 text-red-500 animate-pulse" />
+                  <span>Painel Owner Master</span>
+                </button>
+
+                <button 
+                  id="sidebar-tab-system-health"
+                  onClick={() => setActiveTab("system-health")} 
+                  className={`flex items-center gap-3 px-4 py-3 rounded-lg font-bold text-sm transition-all text-left ${getSidebarBtnClass("system-health")}`}
+                >
+                  <Activity className="w-5 h-5 shrink-0 text-purple-500 animate-pulse" />
+                  <span>Saúde do Sistema</span>
+                </button>
+              </>
             )}
           </nav>
 
@@ -3075,6 +3098,15 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
                 session={session} 
                 triggerNotification={triggerNotification} 
                 onClose={() => setActiveTab("inicio")} 
+              />
+            </div>
+          )}
+
+          {/* TAB: OWNER SYSTEM HEALTH */}
+          {activeTab === "system-health" && (
+            <div id="tab-owner-system-health-view" className="space-y-8 animate-in fade-in duration-300">
+              <SystemHealthDashboard 
+                triggerNotification={triggerNotification} 
               />
             </div>
           )}

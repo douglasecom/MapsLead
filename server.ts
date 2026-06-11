@@ -284,6 +284,100 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok", usingGemini: !!process.env.GEMINI_API_KEY });
 });
 
+// INTEGRATION HEALTH DIAGNOSTIC REPORT FOR THE SYSTEM-HEALTH PAGE
+app.get("/api/health/integrations", async (req, res) => {
+  const report: any = {
+    firebase: { status: "LOADING", message: "Aguardando verificação." },
+    gemini: { status: "LOADING", message: "Aguardando verificação." },
+    asaas: { status: "LOADING", message: "Aguardando verificação." }
+  };
+
+  // 1. Check Firebase / Firestore
+  try {
+    if (!db) {
+      report.firebase = { status: "FAIL", message: "Banco de dados Firestore (db) não inicializado no servidor." };
+    } else {
+      const docRef = doc(db, "settings", "google_maps_config");
+      await getDoc(docRef);
+      report.firebase = { status: "OK", message: "Conexão ativa com o Firebase Firestore estabilizada." };
+    }
+  } catch (err: any) {
+    report.firebase = { status: "FAIL", message: `Falha de conexão com Firestore: ${err.message}` };
+  }
+
+  // 2. Check Gemini API
+  try {
+    const ai = getGeminiClient();
+    if (!ai) {
+      report.gemini = { status: "FAIL", message: "Serviço Gemini inativo: GEMINI_API_KEY não configurada ou inválida." };
+    } else {
+      // Small real request with short timeout and low tokens
+      const testPromise = ai.models.generateContent({
+        contents: "Responder apenas com 'OK'.",
+        model: "gemini-1.5-flash",
+        config: { maxOutputTokens: 5 }
+      });
+      
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Timeout de 4 segundos ao consultar Gemini API.")), 4000)
+      );
+
+      await Promise.race([testPromise, timeoutPromise]);
+      report.gemini = { status: "OK", message: "Conexão ativa. Credenciais Gemini operacionais e homologadas." };
+    }
+  } catch (err: any) {
+    const isNoKey = !process.env.GEMINI_API_KEY;
+    report.gemini = { 
+      status: "FAIL", 
+      message: isNoKey 
+        ? "GEMINI_API_KEY não definida no ambiente (.env)." 
+        : `Erro na autenticação com Gemini: ${err.message}` 
+    };
+  }
+
+  // 3. Check Asaas Gateway
+  try {
+    const asaasKey = process.env.ASAAS_API_KEY;
+    if (!asaasKey || asaasKey.trim() === "") {
+      report.asaas = { status: "FAIL", message: "ASAAS_API_KEY não encontrada no ambiente (.env)." };
+    } else {
+      const isSandbox = !asaasKey.startsWith("$o");
+      const baseUrl = isSandbox ? "https://sandbox.asaas.com/api/v3" : "https://api.asaas.com/v3";
+      
+      const testPromise = fetch(`${baseUrl}/customers?limit=1`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "access_token": asaasKey
+        }
+      });
+
+      const timeoutPromise = new Promise<Response>((_, reject) => 
+        setTimeout(() => reject(new Error("Timeout de 4 segundos na rede com Asaas.")), 4000)
+      );
+
+      const response = await Promise.race([testPromise, timeoutPromise]);
+      
+      if (response.ok) {
+        report.asaas = { 
+          status: "OK", 
+          message: `Conexão ativa com Gateway de Pagamentos Asaas (${isSandbox ? "Sandbox/Homologação" : "Produção"}).` 
+        };
+      } else {
+        const bodyTxt = await response.text().catch(() => "");
+        report.asaas = { 
+          status: "FAIL", 
+          message: `Asaas rejeitou requisição (${response.status}): ${bodyTxt || "Chave inválida ou suspensa."}` 
+        };
+      }
+    }
+  } catch (err: any) {
+    report.asaas = { status: "FAIL", message: `Falha de rede ao conectar com Asaas: ${err.message}` };
+  }
+
+  res.json({ report });
+});
+
 // GET ASAAS/PAYMENT GATEWAY CONFIGURATION
 app.get("/api/config/payment", (req, res) => {
   const asaasKey = process.env.ASAAS_API_KEY || "";
@@ -305,6 +399,207 @@ app.get("/api/config/maps", (req, res) => {
     hasKey: isConfigured,
     key: isConfigured ? mapsKey : ""
   });
+});
+
+// SAVE GOOGLE MAPS CONFIGURATION
+app.post("/api/config/maps/save", async (req, res) => {
+  try {
+    const { key } = req.body;
+    if (!key) {
+      return res.status(400).json({ error: "Chave não fornecida" });
+    }
+
+    // Set in-memory env variables
+    process.env.GOOGLE_MAPS_API_KEY = key;
+    process.env.GOOGLE_MAPS_PLATFORM_KEY = key;
+
+    // Persist to .env
+    const fs = await import("fs/promises");
+    const path = await import("path");
+    const envPath = path.join(process.cwd(), ".env");
+
+    let envContent = "";
+    try {
+      envContent = await fs.readFile(envPath, "utf-8");
+    } catch {
+      // ignore
+    }
+
+    if (envContent.includes("GOOGLE_MAPS_PLATFORM_KEY=")) {
+      envContent = envContent.replace(/GOOGLE_MAPS_PLATFORM_KEY=.*/, `GOOGLE_MAPS_PLATFORM_KEY=${key}`);
+    } else {
+      envContent += `\nGOOGLE_MAPS_PLATFORM_KEY=${key}`;
+    }
+
+    if (envContent.includes("GOOGLE_MAPS_API_KEY=")) {
+      envContent = envContent.replace(/GOOGLE_MAPS_API_KEY=.*/, `GOOGLE_MAPS_API_KEY=${key}`);
+    } else {
+      envContent += `\nGOOGLE_MAPS_API_KEY=${key}`;
+    }
+
+    await fs.writeFile(envPath, envContent.trim() + "\n", "utf-8");
+
+    res.json({ success: true, message: "Chave do Google Maps salva com sucesso!" });
+  } catch (err: any) {
+    console.error("[Save Maps Key Error]", err);
+    res.status(500).json({ error: `Erro ao salvar chave: ${err.message}` });
+  }
+});
+
+// VALIDATE GOOGLE MAPS API SERVICES INDIVIDUALLY
+app.post("/api/config/maps/validate", async (req, res) => {
+  try {
+    const { key, service } = req.body;
+    if (!key) {
+      return res.status(400).json({ error: "Chave não fornecida para validação" });
+    }
+
+    const report: any = {};
+
+    // 0. Maps JavaScript API Test
+    if (!service || service === "maps_js" || service === "billing") {
+      try {
+        const jsUrl = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}`;
+        const jsRes = await fetch(jsUrl);
+        const jsText = await jsRes.text();
+        
+        if (jsRes.ok && !jsText.includes("API key is invalid") && !jsText.includes("ApiNotActivatedMapError") && !jsText.includes("InvalidKeyMapError")) {
+          report.maps_js = { status: "OK", message: "Serviço Maps JavaScript API ativo e pronto para renderização nos canais visuais." };
+        } else {
+          let detail = "Não habilitado ou sem faturamento.";
+          if (jsText.includes("API key is invalid") || jsText.includes("InvalidKeyMapError")) {
+            detail = "Chave de API inválida.";
+          } else if (jsText.includes("ApiNotActivatedMapError")) {
+            detail = "Serviço Maps JS API não está ativado no painel GCP.";
+          }
+          report.maps_js = { status: "FAIL", message: `Falha na ativação do Maps JS: ${detail}` };
+        }
+      } catch (err: any) {
+        report.maps_js = { status: "FAIL", message: `Erro de rede/timeout: ${err.message}` };
+      }
+    }
+
+    // 1. Geocoding API Test
+    if (!service || service === "geocoding" || service === "billing") {
+      try {
+        const geoUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=Googleplex&key=${encodeURIComponent(key)}`;
+        const geoRes = await fetch(geoUrl);
+        const geoData = await geoRes.json();
+        
+        if (geoData.status === "OK") {
+          report.geocoding = { status: "OK", message: "Serviço ativo e respondendo normalmente." };
+        } else if (geoData.status === "ZERO_RESULTS") {
+          report.geocoding = { status: "OK", message: "Conectado com sucesso (nenhum resultado retornado)." };
+        } else {
+          report.geocoding = { 
+            status: "FAIL", 
+            message: geoData.error_message || geoData.status || "Erro desconhecido." 
+          };
+        }
+      } catch (err: any) {
+        report.geocoding = { status: "FAIL", message: `Erro de rede/timeout: ${err.message}` };
+      }
+    }
+
+    // 2. Places API (New) Test
+    if (!service || service === "places" || service === "billing") {
+      try {
+        const placesUrl = `https://places.googleapis.com/v1/places:searchByText?key=${encodeURIComponent(key)}`;
+        const placesRes = await fetch(placesUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": key,
+            "X-Goog-FieldMask": "places.id,places.displayName"
+          },
+          body: JSON.stringify({ textQuery: "Googleplex" })
+        });
+        const placesData = await placesRes.json();
+
+        if (placesRes.ok && placesData.places) {
+          report.places = { status: "OK", message: "Serviço ativo (Places API New respondendo)." };
+        } else {
+          const errMsg = placesData?.error?.message || placesData?.error?.status || "Erro na consulta.";
+          report.places = { status: "FAIL", message: errMsg };
+        }
+      } catch (err: any) {
+        report.places = { status: "FAIL", message: `Erro de rede/timeout: ${err.message}` };
+      }
+    }
+
+    // 3. Directions / Routes API Test
+    if (!service || service === "routes" || service === "billing") {
+      try {
+        const routesUrl = `https://routes.googleapis.com/directions/v2:computeRoutes?key=${encodeURIComponent(key)}`;
+        const routesRes = await fetch(routesUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": key,
+            "X-Goog-FieldMask": "routes.duration,routes.distanceMeters"
+          },
+          body: JSON.stringify({
+            origin: { address: "São Paulo, SP" },
+            destination: { address: "Campinas, SP" },
+            travelMode: "DRIVING"
+          })
+        });
+        const routesData = await routesRes.json();
+
+        if (routesRes.ok && routesData.routes) {
+          report.routes = { status: "OK", message: "Serviço ativo (Routes API respondendo)." };
+        } else {
+          const errMsg = routesData?.error?.message || routesData?.error?.status || "Erro ao computar rota.";
+          report.routes = { status: "FAIL", message: errMsg };
+        }
+      } catch (err: any) {
+        report.routes = { status: "FAIL", message: `Erro de rede/timeout: ${err.message}` };
+      }
+    }
+
+    // 4. Verify Billing Status based on response issues
+    if (!service || service === "billing") {
+      const allMessagesAndStatus = [
+        JSON.stringify(report.maps_js || {}),
+        JSON.stringify(report.geocoding || {}),
+        JSON.stringify(report.places || {}),
+        JSON.stringify(report.routes || {})
+      ].join(" ").toLowerCase();
+
+      const bilNotEnabled = allMessagesAndStatus.includes("billingnotenabled") || 
+                            allMessagesAndStatus.includes("billing is not enabled") ||
+                            allMessagesAndStatus.includes("enable billing") ||
+                            allMessagesAndStatus.includes("billing_not_enabled");
+
+      const keyInvalid = allMessagesAndStatus.includes("api key is invalid") || 
+                         allMessagesAndStatus.includes("invalid key") ||
+                         allMessagesAndStatus.includes("keyinvalid") ||
+                         allMessagesAndStatus.includes("api key not authorized");
+
+      if (keyInvalid) {
+        report.billing = { status: "FAIL", message: "Impossível validar faturamento pois a chave inserida é inválida." };
+      } else if (bilNotEnabled) {
+        report.billing = { status: "FAIL", message: "Conta de faturamento (Billing) desativada ou não vinculada a este projeto." };
+      } else if (
+        (report.geocoding && report.geocoding.status === "OK") || 
+        (report.places && report.places.status === "OK") || 
+        (report.maps_js && report.maps_js.status === "OK")
+      ) {
+        report.billing = { status: "OK", message: "Faturamento ativo. Conta de faturamento ativa e vinculada no Google Cloud." };
+      } else {
+        report.billing = { status: "FAIL", message: "Faturamento inativo ou pendente devido a falha nos serviços." };
+      }
+    }
+
+    res.json({
+      valid: (!service && (report.geocoding?.status === "OK" || report.places?.status === "OK")) || 
+             (service && report[service]?.status === "OK"),
+      report
+    });
+  } catch (err: any) {
+    console.error("[Validate Maps Key Global Error]", err);
+    res.status(500).json({ error: `Erro no processo de validação: ${err.message}` });
+  }
 });
 
 // ----------------------------------------------------
@@ -1346,80 +1641,111 @@ app.post("/api/proposal/generate", async (req, res) => {
       companySize
     } = req.body;
 
-    // Standard baseline math calculation according to diagnostic rules:
+    // Standard baseline math calculation according to official user diagnostic rules:
+    const setupServices: Array<{ servico: string; valor: number }> = [];
+    const monthlyServices: Array<{ servico: string; valor: number }> = [];
+
+    const siteSc = Number(site_score) || 0;
+    const seoSc = Number(seo_score) || 0;
+    const instaSc = Number(instagram_score) || 0;
+    const fbSc = Number(facebook_score) || 0;
+    const mapsSc = Number(maps_score) || 0;
+    const gbpSc = Number(gbp_score) || 0;
+
+    const opportunities: string[] = [];
+
+    // Se não possuir site (site_score === 0 ou < 40)
+    const hasNoSite = siteSc < 30;
+    if (hasNoSite) {
+      opportunities.push("Site");
+    }
+    // Se o site for fraco (site_score entre 30 e 70)
+    const hasWeakSite = siteSc >= 30 && siteSc < 70;
+    if (hasWeakSite) {
+      opportunities.push("Novo Site");
+    }
+    // Se não possuir Instagram (instagram_score < 50)
+    const hasNoInstagram = instaSc < 55;
+    if (hasNoInstagram) {
+      opportunities.push("Instagram");
+    }
+    // Se não possuir Facebook (facebook_score < 50)
+    const hasNoFacebook = fbSc < 55;
+    if (hasNoFacebook) {
+      opportunities.push("Facebook");
+    }
+    // Se SEO Local < 70
+    const hasWeakSEO = seoSc < 70 || mapsSc < 70 || gbpSc < 70;
+    if (hasWeakSEO) {
+      opportunities.push("SEO Local");
+    }
+    // Se possuir site mas baixa geração de leads
+    const hasSiteButLowLeads = siteSc >= 70 && siteSc < 80;
+    if (hasSiteButLowLeads) {
+      opportunities.push("Landing Page");
+    }
+    // Se concorrentes anunciam (ou lead tem anunciadoMeta, ou segmento comum de tráfego)
     const isDental = (segmento || "").toLowerCase().includes("dentista") || 
                      (segmento || "").toLowerCase().includes("odonto") || 
                      (segmento || "").toLowerCase().includes("dental") ||
                      (segmento || "").toLowerCase().includes("odontolog");
+    const hasAnunciosCandidatos = announcedMeta || isDental || (segmento || "").toLowerCase().includes("advogado") || (segmento || "").toLowerCase().includes("estetica");
+    if (hasAnunciosCandidatos) {
+      opportunities.push("Tráfego");
+    }
+    // Atendimento lento ou nicho de alta demanda (geralmente se gbp_score ou maps_score apresentam falhas, ou nichos dinâmicos)
+    const hasAtendimentoLento = gbpSc < 80 || mapsSc < 80 || isDental || (segmento || "").toLowerCase().includes("pizza") || (segmento || "").toLowerCase().includes("delivery") || (segmento || "").toLowerCase().includes("loja");
+    if (hasAtendimentoLento) {
+      opportunities.push("Automação WhatsApp");
+    }
 
-    const setupServices: Array<{ servico: string; valor: number }> = [];
-    const monthlyServices: Array<{ servico: string; valor: number }> = [];
+    // Se houver múltiplas oportunidades (3 ou mais)
+    if (opportunities.length >= 3) {
+      setupServices.push({ servico: "👑 Plano Completo Presença Digital", valor: 5997 });
+      monthlyServices.push({ servico: "👑 Plano Completo Presença Digital", valor: 2997 });
+    } else {
+      // Map individual services
+      if (hasNoSite) {
+        setupServices.push({ servico: "🌐 Site Institucional 5 Páginas", valor: 3500 });
+        monthlyServices.push({ servico: "🌐 Site Institucional 5 Páginas", valor: 297 });
+      } else if (hasWeakSite) {
+        setupServices.push({ servico: "🌐 Desenvolvimento de Novo Site Institucional", valor: 3500 });
+        monthlyServices.push({ servico: "🌐 Suporte & Hospedagem de Novo Site", valor: 297 });
+      } else if (hasSiteButLowLeads) {
+        setupServices.push({ servico: "🚀 Landing Page de Conversão", valor: 1600 });
+        monthlyServices.push({ servico: "🚀 Suporte & Hospedagem LP", valor: 147 });
+      }
 
-    // Rule: if Site < 70
-    if (Number(site_score) < 70) {
-      if (companySize === "Grande") {
-        setupServices.push({ servico: "SITE PREMIUM (Site premium + SEO inicial)", valor: 3497 });
-      } else if (companySize === "Média") {
-        setupServices.push({ servico: "SITE PRO (Site completo otimizado para conversão)", valor: 1997 });
-      } else {
-        setupServices.push({ servico: "SITE STARTER (Site institucional profissional)", valor: 997 });
+      if (hasNoInstagram || hasNoFacebook) {
+        setupServices.push({ servico: "📈 Gestão de Instagram", valor: 500 });
+        monthlyServices.push({ servico: "📈 Gestão de Instagram", valor: 900 });
+      }
+
+      if (hasWeakSEO) {
+        setupServices.push({ servico: "📍 SEO Local", valor: 897 });
+        monthlyServices.push({ servico: "📍 SEO Local", valor: 897 });
+      }
+
+      if (hasAnunciosCandidatos) {
+        // Recommend Google Ads or Meta Ads based on if they announce in Meta or similar
+        if (announcedMeta) {
+          setupServices.push({ servico: "🎯 Tráfego Meta Ads", valor: 997 });
+          monthlyServices.push({ servico: "🎯 Tráfego Meta Ads", valor: 1350 });
+        } else {
+          setupServices.push({ servico: "🔍 Tráfego Google Ads", valor: 997 });
+          monthlyServices.push({ servico: "🔍 Tráfego Google Ads", valor: 1350 });
+        }
+      }
+
+      if (hasAtendimentoLento) {
+        setupServices.push({ servico: "🤖 WhatsApp Business + Automação", valor: 1200 });
+        monthlyServices.push({ servico: "🤖 WhatsApp Business + Automação", valor: 497 });
       }
     }
 
-    // Rule: if SEO < 70 OR Maps < 80 OR GBP < 80
-    if (Number(seo_score) < 70 || Number(maps_score) < 80 || Number(gbp_score) < 80) {
-      if (companySize === "Grande") {
-        monthlyServices.push({ servico: "SEO LOCAL PREMIUM", valor: 1497 });
-      } else if (companySize === "Média") {
-        monthlyServices.push({ servico: "SEO LOCAL PRO", valor: 997 });
-      } else {
-        monthlyServices.push({ servico: "SEO LOCAL START", valor: 497 });
-      }
-    }
-
-    // Rule: if Instagram = 0
-    if (Number(instagram_score) === 0) {
-      if (companySize === "Grande" || companySize === "Média") {
-        monthlyServices.push({ servico: "GESTÃO SOCIAL COMPLETA", valor: 1297 });
-      } else {
-        monthlyServices.push({ servico: "GESTÃO INSTAGRAM", valor: 797 });
-      }
-    }
-
-    // Rule: if Facebook = 0
-    // Integrates Facebook as part of standard checklist (implied with Gestão Social or add customized tag)
-
-    // Rule: if Company announces in Meta Ads (or requested)
-    if (announcedMeta) {
-      if (companySize === "Grande") {
-        monthlyServices.push({ servico: "TRÁFEGO COMPLETO (Meta Ads & Google Ads)", valor: 1997 });
-      } else {
-        monthlyServices.push({ servico: "META ADS", valor: 997 });
-      }
-    }
-
-    // Rule: Dental Clinics specific priorities
-    if (isDental) {
-      // Prioritize SEO Local, Google Business, Google Ads, Instagram, WhatsApp.
-      if (!monthlyServices.some(s => s.servico.includes("SEO LOCAL"))) {
-        const value = companySize === "Grande" ? 1497 : companySize === "Média" ? 997 : 497;
-        const name = companySize === "Grande" ? "SEO LOCAL PREMIUM" : companySize === "Média" ? "SEO LOCAL PRO" : "SEO LOCAL START";
-        monthlyServices.push({ servico: name, valor: value });
-      }
-      if (!monthlyServices.some(s => s.servico.includes("GOOGLE ADS"))) {
-        monthlyServices.push({ servico: "GOOGLE ADS", valor: 997 });
-      }
-      if (!monthlyServices.some(s => s.servico.includes("GESTÃO INSTAGRAM") || s.servico.includes("GESTÃO SOCIAL"))) {
-        monthlyServices.push({ servico: "GESTÃO INSTAGRAM", valor: 797 });
-      }
-      monthlyServices.push({ servico: "AUTOMAÇÃO COMERCIAL", valor: 497 });
-      monthlyServices.push({ servico: "CRM + IA ADSHIVE", valor: 297 });
-    }
-
-    // General fallback if no service is matched: keep it honest & constructive but never empty
     if (setupServices.length === 0 && monthlyServices.length === 0) {
-      setupServices.push({ servico: "SITE STARTER", valor: 997 });
-      monthlyServices.push({ servico: "SEO LOCAL START", valor: 497 });
+      setupServices.push({ servico: "🚀 Landing Page de Conversão", valor: 1600 });
+      monthlyServices.push({ servico: "🚀 Suporte & Hospedagem LP", valor: 147 });
     }
 
     const totalSetup = setupServices.reduce((sum, s) => sum + s.valor, 0);
@@ -1430,16 +1756,24 @@ app.post("/api/proposal/generate", async (req, res) => {
 
     // Setup standard baseline model response
     const defaultResponse = {
-      relatorioExecutivo: `Análise estratégica premium para a empresa ${empresa || "Nome da Empresa"}, que opera no mercado de ${segmento || "Serviços Digitais"} em ${cidade || "sua região"}. Este diagnóstico apresenta gaps de visibilidade regional e propõe soluções focadas em geração de novos clientes qualificados por meio de canais automatizados e estruturação de tráfego.`,
+      relatorioExecutivo: `Análise estratégica de posicionamento digital desenvolvida especialmente para a empresa ${empresa || "Nome da Empresa"}, visando dominar o segmento de ${segmento || "sua área"} na cidade de ${cidade || "sua localidade"}. Identificamos excelentes avaliações orgânicas e propomos uma reestruturação comercial de alta performance com metodologia premium AdsHive Prospect.`,
       
-      diagnostico: `PONTOS FORTES:\n- Empresa possui excelente nota de avaliação média no Google Maps (${rating || "4.5"}★ estrelas),\n- Presença espontânea respeitada pela comunidade local com ${reviews || 0} avaliações espontâneas.\n\nOPORTUNIDADES IDENTIFICADAS:\n${Number(site_score) < 70 ? "- Ausência de canal institucional de conversão mobile-first (site de carregamento otimizado).\n" : ""}${Number(seo_score) < 70 ? "- Atração orgânica regional carece de refinamento de palavras-chave locais.\n" : ""}${Number(instagram_score) === 0 ? "- Inexistência de engajamento ativo no Instagram profissional comercial.\n" : ""}- Ausência de CRM de vendas integrado e de automações de atendimento para captação B2B imediata.`,
+      diagnostico: `PONTOS FORTES:
+- Forte reputação local com média de ${rating || "4.5"}★ estrelas no Google Maps baseada em ${reviews || 0} avaliações autênticas dos clientes.
+- Presença territorial orgânica relevante com clientes satisfeitos na região de ${cidade || "sua localidade"}.
+
+OPORTUNIDADES DE CRESCIMENTO:
+${siteSc < 30 ? "- Ausência de canal institucional de conversão estruturado para receber novos clientes.\n" : ""}${siteSc >= 30 && siteSc < 70 ? "- Website atual fraco, desatualizado, lento ou sem otimização de conversão direta.\n" : ""}${instaSc < 55 ? "- Ausência de presença profissional madura e atualizada nas redes sociais (Instagram/Facebook).\n" : ""}${seoSc < 70 ? "- Perfil no Google Business Profile sem higienização estratégica e sem técnicas de SEO Local.\n" : ""}- Ausência de funis de atendimento rápido de conversão pelo WhatsApp Business.`,
       
-      impactoFinanceiro: `Diante da falta de ferramentas de conversão direta e indexação local refinada, estima-se que a ${empresa || "empresa"} perca de 35% a 50% de todas as conexões telefônicas ou de WhatsApp que sua marca recebe espontaneamente no Google Maps. Isso gera um vazamento financeiro de receitas estimada entre R$ 5.000,00 e R$ 15.000,00 mensais em vendas que são direcionadas diretamente para marcas concorrentes na cidade de ${cidade || "sua região"}.`,
+      impactoFinanceiro: `Oportunidades mapeadas e análise com impacto financeiro estimado de clientes perdidos:
+- Vulnerabilidade de Tráfego: perda diária estimada de 30% a 50% de leads qualificados da sua região para concorrentes devido à falta de posicionamento estratégico nas buscas.
+- Perda Estimada Mensal: vazamento invisível de receitas avaliado em aproximadamente R$ 4.000,00 a R$ 15.000,00 mensais em vendas não convertidas na cidade de ${cidade}.
+- Solução de alto retorno: as melhorias sugeridas pagam-se rapidamente restaurando a captura de contatos altamente inclinados a fechar.`,
       
       planoDeAcao: {
-        curtoPrazo: `Correção cadastral, higienização de imagens e inserção estratégica de FAQ otimizado no Google Business Profile (GBP) para dominância de buscas regionais rápidas do setor em 7 dias.`,
-        medioPrazo: `Desenvolvimento e publicação de um Website Mobile-First Express ultra veloz, com botões integrados para WhatsApp de atendimento rápido da equipe.`,
-        longoPrazo: `Estruturação de campanhas coordenadas de tráfego pago (Meta Ads / Google Ads), ativação de automações de prospecção comercial síncronas e acompanhamento sistemático de leads no CRM.`
+        curtoPrazo: `Higienização cadastral completa da ficha do Google Business Profile e otimização inicial de palavras-chave para o algoritmo local do Google.`,
+        medioPrazo: `Implantação do novo canal de conversão mobile-first (Site Institucional de 5 Páginas ou Landing Page de Vendas) integrado com botões focantes no WhatsApp.`,
+        longoPrazo: `Ativação de campanhas coordenadas de tráfego pago (Google Ads ou Meta Ads) combinadas com funil automatizado inteligente para acompanhamento de leads.`
       },
       
       investimentos: [
@@ -1449,16 +1783,27 @@ app.post("/api/proposal/generate", async (req, res) => {
       totalSetup,
       totalMonthly,
       
-      projecaoResultados: `- Aumento no volume de cliques locais de 48% a 75% nos primeiros meses.\n- Atração mensal estimada de ${estLeads} novos leads interessados no canal do WhatsApp.\n- Conversão e agendamento de ${estMeetings} novas reuniões/consultas qualificadas.\n- Elevação da blindagem de marca no topo absoluto das pesquisas orgânicas locais.`,
+      projecaoResultados: `Padrões de benefícios estratégicos e resultados estimados na região de ${cidade}:
+- Mais visibilidade local: aumento projetado de 45% a 80% em contatos, visualizações e cliques em até 90 dias.
+- Mais contatos e agendamentos: estimativa de ${estLeads} novos leads gerados mensalmente com taxa de engajamento acelerada.
+- Mais vendas qualificadas: conversão estimada de ${estMeetings} novos agendamentos/reuniões firmadas.
+- Mais autoridade digital: blindagem de marca sólida contra concorrentes diretos locais.`,
       
       cronograma: {
-        semana1: `Reunião de alinhamento tático, briefing visual, e higienização inicial da ficha do Google Business Profile.`,
-        semana2: `Desenvolvimento de copy persuasivo e programação do novo site institucional express adaptado para celulares.`,
-        semana3: `Setup das ferramentas de pixel e automação, além de integração do funil direto de atendimento de WhatsApp do lead.`,
-        semana4: `Entrega técnica final (Go Live), indexação rápida nos servidores do Google e ativação da esteira recorrente de leads.`
+        semana1: `Planejamento tático inicial, reunião de alinhamento com Douglas Pereira e higienização estratégica do Google Negócios.`,
+        semana2: `Desenvolvimento de copywriting persuasivo, design de layout responsivo e criação do novo canal de conversão express.`,
+        semana3: `Setup técnico de automações, pixel de conversão, integração da esteira de WhatsApp e testes de velocidade.`,
+        semana4: `Go Live comercial oficial, indexação rápida nos servidores do Google e ativação da esteira de vendas do CRM.`
       },
       
-      fechamento: `Estamos prontos para transformar sua presença digital em uma verdadeira máquina de geração de clientes.`
+      fechamento: `Os Próximos Passos recomendados são:
+1. Aprovação da presente proposta comercial e alinhamento dos planos.
+2. Reunião de alinhamento estratégico para definição de metas.
+3. Implantação e desenvolvimento técnico dos canais contratados.
+4. Entrega, treinamento rápido e ativação (Go Live).
+5. Acompanhamento recorrente, otimização contínua de métricas e suporte.
+
+Com base no diagnóstico realizado, acreditamos que esta é a estratégia com maior potencial para gerar crescimento sustentável e novas oportunidades comerciais para a empresa.`
     };
 
     const ai = getGeminiClient();
@@ -1466,43 +1811,71 @@ app.post("/api/proposal/generate", async (req, res) => {
       try {
         console.log(`[Gemini Proposal Engine] Generating customized high-converting B2B proposal for "${empresa}"...`);
         
-        const systemInstruction = `Você é um consultor sênior de transformação digital e especialista em SEO Local, Google Maps, Google Business Profile, criação de sites, tráfego pago, automação comercial, CRM e inteligência de vendas. Sua missão é gerar propostas comerciais premium, altamente persuasivas e profissionais sob a marca "AdsHive Prospect" (slogan: INTELIGÊNCIA DE VENDAS), que se posiciona como uma Consultoria Premium de Crescimento Digital. Adote um tom estritamente Profissional, Consultivo, Executivo e Persuasivo. Nunca utilize linguagem agressiva. Gere o conteúdo detalhado em português (PT-BR).`;
+        const systemInstruction = `Você é o PROMPT MASTER da AdsHive Prospect - especialista sênior em marketing digital, páginas web premium, SEO Local, tráfego pago, e inteligência comercial de vendas. Sua função é gerar propostas comerciais refinadas, consultivas e persuasivas com tom corporativo premium de alta autoridade. Evite promessas irreais e linguagem agressiva comercial. Priorize clareza, credibilidade técnica e foco no Retorno sobre Investimento (ROI). Exiba sempre informações reais baseadas nas métricas diagnosticadas do lead.`;
 
-        const prompt = `Gere os textos refinados para a Proposta Comercial Premium da empresa "${empresa}".
-Dados coletados na auditoria:
-- Cidade de atuação: ${cidade}
-- Segmento de mercado: ${segmento}
-- Nota de diagnóstico do Google Maps: ${maps_score}/100 (Nota média de avaliações: ${rating}★ de ${reviews} clientes)
-- Nota de diagnóstico do site oficial: ${site_score}/100
-- Nota de diagnóstico de SEO Local: ${seo_score}/100
+        const prompt = `Analise cuidadosamente os dados coletados abaixo para gerar uma Proposta Comercial Personalizada da marca "AdsHive Prospect" (Slogan: INTELIGÊNCIA DE VENDAS) estruturada como um objeto JSON.
+
+DADOS DE ENTRADA DO LEAD:
+- Empresa: ${empresa}
+- Segmento: ${segmento}
+- Cidade: ${cidade}
+- Nota de otimização Google Maps / Business: ${maps_score}/100 (Média de avaliações: ${rating}★ baseada em ${reviews} avaliações)
+- Nota de Site Oficial: ${site_score}/100
+- Nota de SEO Local: ${seo_score}/100
 - Nota de presença no Instagram: ${instagram_score}/100
 - Nota de presença no Facebook: ${facebook_score}/100
-- Nota do Perfil do Google Negócios: ${gbp_score}/100
-- Empresa já anuncia no Meta Ads? ${announcedMeta ? "Sim" : "Não de forma estruturada"}
-- Porte estimado: ${companySize}
-- Serviços mapeados de acordo com os gaps diagnosticados: ${JSON.stringify(setupServices.concat(monthlyServices))}
+- Nota do Perfil do Google Business Profile: ${gbp_score}/100
+- Já anuncia de forma ativa no Facebook/Instagram Ads? ${announcedMeta ? "Sim" : "Não detectado"}
+- Porte estimado de mercado: ${companySize}
 
-Retorne um objeto JSON com o seguinte formato estruturado:
+TABELA OFICIAL DE PREÇOS ADSHIVE (Use estes serviços, setup, mensalidade e recursos para justificar a proposta):
+1. 🌐 Site Institucional 5 Páginas: Setup R$ 3.500, Mensalidade R$ 297 (Inclui: Design profissional, Responsivo, SEO básico, WhatsApp integrado, Formulários inteligentes, Hospedagem gerenciada)
+2. 🚀 Landing Page de Conversão: Setup R$ 1.600, Mensalidade R$ 147 (Inclui: Página focada em vendas, Copywriting, Integração WhatsApp, Formulários, Conversão otimizada)
+3. 📈 Gestão de Instagram: Setup R$ 500, Mensalidade R$ 900 (Inclui: Planejamento estratégico, Artes profissionais, Calendário editorial, Stories, Relatórios mensais)
+4. 🎯 Tráfego Meta Ads: Setup R$ 997, Mensalidade R$ 1.350 (Inclui: Facebook Ads, Instagram Ads, Públicos personalizados, Remarketing, Relatórios)
+5. 🔍 Tráfego Google Ads: Setup R$ 997, Mensalidade R$ 1.350 (Inclui: Rede de Pesquisa, Rede de Display, Conversões, Remarketing, Relatórios)
+6. 📍 SEO Local: Setup R$ 897, Mensalidade R$ 897 (Inclui: Google Business Profile, SEO Local, Otimização de palavras-chave, Postagens semanais, Gestão de reputação)
+7. 🤖 WhatsApp Business + Automação: Setup R$ 1.200, Mensalidade R$ 497 (Inclui: Catálogo, Mensagens automáticas, Fluxos inteligentes, Captação de leads, Atendimento automatizado)
+8. 👑 Plano Completo Presença Digital: Setup R$ 5.997, Mensalidade R$ 2.997 (Inclui: Site, SEO Local, Instagram, Google Ads, Meta Ads, Automações, Consultoria estratégica)
+
+RECOMENDAÇÃO AUTOMÁTICA DE PROPOSTA:
+- Os serviços selecionados pelo nosso algoritmo para este lead são: ${JSON.stringify(setupServices.concat(monthlyServices))} com implantação total de R$ ${totalSetup} e mensalidade de R$ ${totalMonthly}.
+- Se houver múltiplas oportunidades (3 ou mais), ofereça preferencialmente o "Plano Completo Presença Digital".
+
+A Proposta Comercial deve obrigatoriamente apresentar a estrutura a seguir corporativizada no JSON retornado:
+
+1. Diagnóstico Atual: Explicar detalhadamente os pontos fortes técnicos identificados e as oportunidades de crescimento reais e gaps gritantes de ranqueamento que estão facilitando o roubo de clientes pela concorrência.
+2. Oportunidades Identificadas: Listar as oportunidades de melhoria enumeradas e detalhar o exato impacto financeiro e perda de faturamento invisível de cada melhoria ausente.
+3. Solução Recomendada: Apresentar de forma persuasiva e com autoridade os benefícios da contratação do pacote de serviços selecionado (${JSON.stringify(setupServices.concat(monthlyServices))}), explicando o exato motivo técnico decorrente e o potencial esperado de retorno de investimento.
+4. Plano de Ação dividido cronologicamente em curto, médio e longo prazo.
+5. Investimento detalhando os valores acordados de setup e acompanhamento mensal.
+6. Benefícios Esperados (Mais visibilidade, mais contatos, mais agendamentos, mais vendas, mais autoridade digital).
+7. Próximos Passos (1. Aprovação, 2. Alinhamento, 3. Implantação, 4. Entrega, 5. Acompanhamento).
+
+Garanta que ao final do fechamento ou resumo executivo do texto, a seguinte frase seja gerada de forma 100% IDÊNTICA:
+"Com base no diagnóstico realizado, acreditamos que esta é a estratégia com maior potencial para gerar crescimento sustentável e novas oportunidades comerciais para a empresa."
+
+Retorne um objeto JSON estritamente com o seguinte formato de par estruturado:
 {
-  "relatorioExecutivo": "Texto persuasivo e analítico do relatório executivo posicionando a AdsHive Prospect como consultoria sênior. Resuma o cenário com dados coletados da região.",
-  "diagnostico": "Explicação detalhada dos pontos fortes identificados (como satisfação real do lead) e as principais oportunidades encontradas conforme os gaps nos scores (site, maps, instagram, etc). Divida em PONTOS FORTES e OPORTUNIDADES.",
-  "impactoFinanceiro": "Explique com números realistas, persuasivos e elegantes o quanto de faturamento e clientes a empresa está deixando na mesa diariamente com esses gaps que favorecem a concorrência.",
+  "relatorioExecutivo": "Resumo de escopo executivo premium sênior formal direcionando para os tomadores de decisão.",
+  "diagnostico": "Seção Diagnóstico Detalhado detalhando os pontos fortes e as oportunidades e gaps do mercado.",
+  "impactoFinanceiro": "Seção Oportunidades Identificadas descrevendo detalhadamente as perdas financeiras estimadas e faturamento perdido com os gaps digitais.",
   "planoDeAcao": {
-    "curtoPrazo": "Método detalhado de ação de curto prazo (primeiros 7 dias)",
-    "medioPrazo": "Ação tática de médio prazo (8 a 21 dias)",
-    "longoPrazo": "Estratégia continuada de longo prazo focado em recorrência e escala"
+    "curtoPrazo": "Detalhamento da ação imediata (1 a 7 dias).",
+    "medioPrazo": "Detalhamento da ação média (8 a 21 dias).",
+    "longoPrazo": "Detalhamento técnico de escala recorrente de longo prazo."
   },
-  "projecaoResultados": "Estimativa realista e empolgante de resultados (ex: aumento estimado de cliques, quantidade esperada de novos leads por WhatsApp, novos agendamentos e blindagem digital regional)",
+  "projecaoResultados": "Lista estruturada descrevendo os Benefícios Esperados (Mais visibilidade, mais contatos, mais agendamentos, mais vendas, mais autoridade digital) e projeções táticas de crescimento econômico.",
   "cronograma": {
-    "semana1": "Detalhamento da Semana 1",
-    "semana2": "Detalhamento da Semana 2",
-    "semana3": "Detalhamento da Semana 3",
-    "semana4": "Detalhamento da Semana 4"
+    "semana1": "Semana 1 de implantação técnica",
+    "semana2": "Semana 2 de implantação técnica",
+    "semana3": "Semana 3 de implantação técnica",
+    "semana4": "Semana 4 de implantação técnica"
   },
-  "fechamento": "Chamada para ação refinada, executiva e amigável reforçando a prontidão para iniciar no primeiro dia útil útil."
+  "fechamento": "Chamada para ação profissional final enumerando detalhadamente os Próximos Passos (1. Aprovação da proposta, 2. Reunião de alinhamento, 3. Implantação, 4. Entrega, 5. Acompanhamento) em tom premium e o encerramento obrigatório contendo a frase literal: 'Com base no diagnóstico realizado, acreditamos que esta é a estratégia com maior potencial para gerar crescimento sustentável e novas oportunidades comerciais para a empresa.'"
 }
 
-Garanta que as explicações sejam altamente personalizadas e específicas para o segmento/nicho de "${segmento}" de forma sofisticada e realista. Não inclua blocos de markdown, responda APENAS o JSON estruturado puro.`;
+Não insira blocos de código markdown como \`\`\`json ou explicações externas ao JSON, retorne APENAS o JSON puro.`;
 
         const aiResponse = await generateContentWithRetry(ai, {
           contents: prompt,
