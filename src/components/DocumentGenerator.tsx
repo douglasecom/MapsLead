@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Lead } from '../types';
+import { getApiUrl, logResponseDebug } from '../utils/api';
 import { 
   FileText, ShieldCheck, Globe, Printer, Copy, Check, 
   ExternalLink, Smartphone, ShoppingCart, Calendar, 
@@ -55,7 +56,7 @@ export const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
   const fetchProposal = async (isRegen = false) => {
     setIsLoadingProposal(true);
     try {
-      const response = await fetch("/api/proposal/generate", {
+      const response = await fetch(getApiUrl("/api/proposal/generate"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -74,6 +75,7 @@ export const DocumentGenerator: React.FC<DocumentGeneratorProps> = ({
           companySize
         })
       });
+      await logResponseDebug(response);
       if (!response.ok) throw new Error("Erro na rede do servidor");
       const data = await response.json();
       setProposalData(data);

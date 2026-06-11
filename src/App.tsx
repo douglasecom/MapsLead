@@ -46,6 +46,7 @@ import {
 import { initialLeads } from "./initialData";
 import { Lead, GeneratedMessage, UserSession } from "./types";
 import { generateLeadWebsiteAnalysis } from "./utils/stitchHelper";
+import { getApiUrl, logResponseDebug } from "./utils/api";
 import { AuthGate } from "./components/AuthGate";
 import { LandingPage } from "./components/LandingPage";
 import { KanbanCRM } from "./components/KanbanCRM";
@@ -289,8 +290,9 @@ export default function App() {
   const [mapsConfig, setMapsConfig] = useState<{ hasKey: boolean; key: string }>({ hasKey: false, key: "" });
 
   useEffect(() => {
-    fetch("/api/config/maps")
+    fetch(getApiUrl("/api/config/maps"))
       .then(async res => {
+        await logResponseDebug(res);
         if (!res.ok) {
           throw new Error(`Google Maps API server response status not OK: ${res.status}`);
         }
@@ -677,7 +679,7 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
     if (!session?.id) return;
     setIsProcessingAiPackPurchase(true);
     try {
-      const response = await fetch("/api/asaas/buy-ai-package", {
+      const response = await fetch(getApiUrl("/api/asaas/buy-ai-package"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -686,6 +688,7 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
           method: "pix"
         })
       });
+      await logResponseDebug(response);
       const data = await response.json();
       if (response.ok && data.status === "success") {
         triggerNotification(data.message, "success");
@@ -720,7 +723,7 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
 
     setIsGeneratingAiCustom(true);
     try {
-      const response = await fetch("/api/ai/interact", {
+      const response = await fetch(getApiUrl("/api/ai/interact"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -741,6 +744,7 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
         })
       });
 
+      await logResponseDebug(response);
       const contentType = response.headers.get("content-type") || "";
       if (!response.ok) {
         let errorMsg = "Ocorreu uma falha ao contatar o AdsHive AI.";
@@ -794,7 +798,7 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
     setSearchedYet(true);
     
     try {
-      const response = await fetch("/api/leads/generate", {
+      const response = await fetch(getApiUrl("/api/leads/generate"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -804,6 +808,7 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
         })
       });
       
+      await logResponseDebug(response);
       const contentType = response.headers.get("content-type") || "";
       if (!response.ok) {
         let errorMsg = `HTTP ${response.status} - Erro de processamento na pesquisa`;
@@ -944,7 +949,7 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
     triggerNotification("Analisando perfil digital e gerando abordagem inovadora...", "info");
 
     try {
-      const response = await fetch("/api/message/generate", {
+      const response = await fetch(getApiUrl("/api/message/generate"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -958,6 +963,7 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
         })
       });
 
+      await logResponseDebug(response);
       const data = await response.json();
       if (data.text) {
         setGeneratedMessageText(data.text);

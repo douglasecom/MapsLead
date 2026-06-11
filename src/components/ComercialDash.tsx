@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Lead, UserSession, SaaSPlan, SaaSPayment, SaasTeam, SaaSActivityLog } from '../types';
+import { getApiUrl, logResponseDebug } from '../utils/api';
 import { 
   db, auth 
 } from '../firebase';
@@ -83,7 +84,8 @@ export const ComercialDash: React.FC<ComercialDashProps> = ({
         setLoading(true);
 
         // A. Load gateway info
-        const configReq = await fetch('/api/config/payment');
+        const configReq = await fetch(getApiUrl('/api/config/payment'));
+        await logResponseDebug(configReq);
         if (configReq.ok) {
           const cfg = await configReq.json();
           setAsaasConfig(cfg);
@@ -178,7 +180,7 @@ export const ComercialDash: React.FC<ComercialDashProps> = ({
     setCheckoutProcessing(true);
 
     try {
-      const response = await fetch('/api/asaas/checkout', {
+      const response = await fetch(getApiUrl('/api/asaas/checkout'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -188,6 +190,7 @@ export const ComercialDash: React.FC<ComercialDashProps> = ({
         })
       });
 
+      await logResponseDebug(response);
       if (response.ok) {
         const result = await response.json();
         
@@ -353,7 +356,7 @@ export const ComercialDash: React.FC<ComercialDashProps> = ({
   const handleTriggerSimulatedWebhook = async () => {
     setSimProcessing(true);
     try {
-      const res = await fetch('/api/webhooks/asaas/simulate', {
+      const res = await fetch(getApiUrl('/api/webhooks/asaas/simulate'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -364,6 +367,7 @@ export const ComercialDash: React.FC<ComercialDashProps> = ({
         })
       });
 
+      await logResponseDebug(res);
       if (res.ok) {
         const reply = await res.json();
         triggerNotification(`Webhook de teste enviado! Evento processado: ${simWebhookEvent}`, "success");
