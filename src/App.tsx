@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import {
   LayoutDashboard,
   Search,
@@ -520,6 +521,15 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
     }
   }, [session]);
 
+  // Trigger automatic search pre-load for Developer Maps extractor logins
+  useEffect(() => {
+    if (session && session.initialNiche && session.initialLocation) {
+      setSearchNiche(session.initialNiche);
+      setSearchLocation(session.initialLocation);
+      handleSearchLeads(undefined, session.initialNiche, session.initialLocation);
+    }
+  }, [session]);
+
   // 2. Multi-collection reactive lead mutations replicator
   useEffect(() => {
     if (!session) return;
@@ -786,7 +796,7 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
   };
 
   // Perform Gemini Search for Leads
-  const handleSearchLeads = async (e?: React.FormEvent) => {
+  const handleSearchLeads = async (e?: React.FormEvent, customNiche?: string, customLocation?: string) => {
     if (e) e.preventDefault();
     
     // Check SaaS subscriptional status guard
@@ -805,13 +815,16 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
     setIsSearching(true);
     setSearchedYet(true);
     
+    const nicheToUse = customNiche || searchNiche;
+    const locationToUse = customLocation || searchLocation;
+
     try {
       const response = await fetch(getApiUrl("/api/leads/generate"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          niche: searchNiche,
-          location: searchLocation,
+          niche: nicheToUse,
+          location: locationToUse,
           limit: quantity / 5 // Scale the range input to realistic result lists
         })
       });
@@ -841,10 +854,10 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
       if (data.leads && Array.isArray(data.leads)) {
         // Map elements with IDs and state
         const formattedLeads: Lead[] = data.leads.map((l: any, i: number) => ({
-          id: `search_lead_${Date.now()}_${i}`,
+          id: l.id || `search_lead_${Date.now()}_${i}`,
           name: l.name,
-          niche: searchNiche,
-          location: searchLocation,
+          niche: nicheToUse,
+          location: locationToUse,
           rating: l.rating,
           reviews: l.reviews,
           hasWebsite: l.hasWebsite,
@@ -855,7 +868,7 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
           status: "novo",
           captured: false,
           gmbAnalysis: l.gmbAnalysis,
-          avatarColor: getAvatarColorForNiche(searchNiche),
+          avatarColor: getAvatarColorForNiche(nicheToUse),
           isCorporatePriority: l.isCorporatePriority,
           corporateTag: l.corporateTag,
           b2bRecommendation: l.b2bRecommendation
@@ -1480,8 +1493,17 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
             </div>
           )}
           
-          {/* TAB 1: VISÃO GERAL */}
-          {activeTab === "inicio" && (
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              className="w-full flex-1"
+            >
+              {/* TAB 1: VISÃO GERAL */}
+              {activeTab === "inicio" && (
             <div id="tab-inicio-view" className="space-y-8 animate-in fade-in duration-300">
               
               {/* Header section panel */}
@@ -3518,6 +3540,8 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
               themeMode={themeMode}
             />
           )}
+            </motion.div>
+          </AnimatePresence>
 
         </main>
       </div>

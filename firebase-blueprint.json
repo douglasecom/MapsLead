@@ -192,6 +192,62 @@
         "createdAt": { "type": "string" }
       },
       "required": ["id", "title", "company", "responsible", "date", "time", "type", "status"]
+    },
+    "LeadSearchCache": {
+      "title": "LeadSearchCache",
+      "description": "Cache collection for high-efficiency Maps and database searching.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "searchKey": { "type": "string" },
+        "niche": { "type": "string" },
+        "city": { "type": "string" },
+        "state": { "type": "string" },
+        "totalResults": { "type": "number" },
+        "lastUpdated": { "type": "string" },
+        "source": { "type": "string" },
+        "leads": { "type": "array" }
+      },
+      "required": ["id", "searchKey", "niche", "city", "state", "totalResults", "lastUpdated", "source", "leads"]
+    },
+    "Company": {
+      "title": "Company",
+      "description": "Unique corporate entity stored to avoid duplicate records.",
+      "type": "object",
+      "properties": {
+        "placeId": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "website": { "type": "string" },
+        "address": { "type": "string" },
+        "city": { "type": "string" },
+        "state": { "type": "string" },
+        "rating": { "type": "number" },
+        "reviewCount": { "type": "number" },
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" },
+        "category": { "type": "string" },
+        "source": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["placeId", "name", "address", "city", "state", "updatedAt"]
+    },
+    "LeadSearchStats": {
+      "title": "LeadSearchStats",
+      "description": "Performance counters and analytics tracking API savings & caching health.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companiesStoredCount": { "type": "number" },
+        "cacheHits": { "type": "number" },
+        "mapsCalls": { "type": "number" },
+        "estimatedApiSavings": { "type": "number" },
+        "estimatedMonthlySavings": { "type": "number" },
+        "topCities": { "type": "array" },
+        "topNiches": { "type": "array" },
+        "lastCacheUpdate": { "type": "string" }
+      },
+      "required": ["id", "companiesStoredCount", "cacheHits", "mapsCalls", "estimatedApiSavings", "estimatedMonthlySavings"]
     }
   },
   "firestore": {
@@ -242,6 +298,18 @@
     "/creditConfigs/{configId}": {
       "schema": "CreditConfig",
       "description": "Admin configurable parameters adjusting operational costs on credits."
+    },
+    "/leadSearchCache/{cacheId}": {
+      "schema": "LeadSearchCache",
+      "description": "Regional query caches to minimize Google Maps API consumption."
+    },
+    "/companies/{companyId}": {
+      "schema": "Company",
+      "description": "Global normalized list of unique real verified companies."
+    },
+    "/leadSearchStats/{statId}": {
+      "schema": "LeadSearchStats",
+      "description": "High level system-wide statistics for the owner dashboard."
     }
   }
 }

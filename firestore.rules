@@ -190,5 +190,20 @@ service cloud.firestore {
       allow create, update: if isSignedIn() && isValidId(meetingId) && isValidMeeting(incoming());
       allow delete: if isSignedIn();
     }
+
+    // 13. leadSearchCache collection
+    match /leadSearchCache/{cacheId} {
+      allow read, write: if true;
+    }
+
+    // 14. companies collection
+    match /companies/{companyId} {
+      allow read, write: if true;
+    }
+
+    // 15. leadSearchStats collection
+    match /leadSearchStats/{statId} {
+      allow read, write: if true;
+    }
   }
 }

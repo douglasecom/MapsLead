@@ -108,6 +108,8 @@ export interface UserSession {
   planCredits?: number;
   purchasedCredits?: number;
   accountStatus?: 'ACTIVE' | 'LIMITED';
+  initialNiche?: string;
+  initialLocation?: string;
 }
 
 export interface SaaSPlan {

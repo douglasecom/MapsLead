@@ -75,6 +75,14 @@ export const AuthGate: React.FC<AuthGateProps> = ({
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  // Dev Maps link extractor states
+  const [isDevPanelOpen, setIsDevPanelOpen] = useState(false);
+  const [mapsUrl, setMapsUrl] = useState('');
+  const [mapsLimit, setMapsLimit] = useState(10);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [extractSuccess, setExtractSuccess] = useState(false);
+  const [extractError, setExtractError] = useState('');
+
   // Theme Sync inside AuthGate (saves to localStorage and updates body class)
   const [themeMode, setThemeMode] = useState<'dark' | 'light'>(() => {
     const saved = localStorage.getItem('theme');
@@ -354,6 +362,68 @@ export const AuthGate: React.FC<AuthGateProps> = ({
       onSignIn(tempUserSession);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleDevExtraction = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mapsUrl.trim()) {
+      setExtractError('Por favor, insira o link do Google Maps para extração de dados.');
+      return;
+    }
+    
+    setIsExtracting(true);
+    setExtractError('');
+    setExtractSuccess(false);
+    
+    try {
+      const response = await fetch('/api/leads/import-maps-link', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          mapsUrl: mapsUrl.trim(),
+          limit: mapsLimit
+        })
+      });
+      
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Falha ao processar o link do Google Maps.');
+      }
+      
+      setExtractSuccess(true);
+      console.log('[Dev Maps Engine] Successful offline extraction:', data);
+      
+      // Auto logging-in developer douglasbateriacma@gmail.com with maps initial variables focus!
+      const devSession: UserSession = {
+        id: 'dev_douglas_cma',
+        name: 'Douglas CMA (Dev)',
+        email: 'douglasbateriacma@gmail.com',
+        role: 'Administrador',
+        avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
+        plan: 'Unlimited',
+        credits: 999999,
+        subscriptionStatus: 'ACTIVE',
+        initialNiche: data.niche,
+        initialLocation: data.location,
+        accountStatus: 'ACTIVE',
+        remainingCredits: 999999,
+        planCredits: 999999,
+        bonusCredits: 0,
+        purchasedCredits: 0
+      };
+      
+      setTimeout(() => {
+        onSignIn(devSession);
+      }, 1000);
+      
+    } catch (err: any) {
+      console.error('[Dev Maps Engine Error]', err);
+      setExtractError(err.message || 'Erro de comunicação ao importar do Maps.');
+    } finally {
+      setIsExtracting(false);
     }
   };
 
@@ -648,6 +718,97 @@ export const AuthGate: React.FC<AuthGateProps> = ({
                       </svg>
                       Continuar com o Google
                     </button>
+                  </div>
+
+                  {/* DEVELOPER GOOGLE MAPS EXTRACTION MODULE - NO AI INTEGRATION */}
+                  <div className="pt-3 border-t border-dashed border-slate-200 dark:border-[#2B2B3A]/60 flex flex-col items-center">
+                    <button
+                      type="button"
+                      onClick={() => setIsDevPanelOpen(!isDevPanelOpen)}
+                      className="text-[11px] font-black text-[#8B2EFF] hover:underline flex items-center gap-1 cursor-pointer transition-all uppercase tracking-wider"
+                    >
+                      🛠️ {isDevPanelOpen ? 'Fechar Painel do Desenvolvedor' : 'Área do Desenvolvedor (Extração Maps Direta - Sem IA)'}
+                    </button>
+
+                    <AnimatePresence>
+                      {isDevPanelOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="w-full mt-3 overflow-hidden space-y-3 p-3.5 rounded-xl border bg-slate-100/50 dark:bg-[#12121A] border-slate-200 dark:border-[#2B2B3A] text-left"
+                        >
+                          <div className="space-y-1">
+                            <span className="text-[10px] uppercase font-black tracking-widest text-[#8B2EFF] block">Google Maps Extrator do Dev</span>
+                            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold leading-relaxed">
+                              Importação direta baseada em links de busca ou locais do Google Maps. Filtra pixel, SSL, WhatsApp, avaliações e dados comerciais offline sem uso de inteligência artificial.
+                            </p>
+                          </div>
+
+                          {extractError && (
+                            <div className="text-[10px] font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-lg leading-snug">
+                              ⚠️ {extractError}
+                            </div>
+                          )}
+
+                          {extractSuccess && (
+                            <div className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 p-2.5 rounded-lg leading-snug">
+                              ✓ Extração concluída com sucesso! Autenticando com credenciais de desenvolvedor...
+                            </div>
+                          )}
+
+                          <form onSubmit={handleDevExtraction} className="space-y-3.5">
+                            <div className="space-y-1.5">
+                              <label className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block">
+                                Link Google Maps
+                              </label>
+                              <input
+                                type="url"
+                                required
+                                value={mapsUrl}
+                                onChange={(e) => setMapsUrl(e.target.value)}
+                                placeholder="https://www.google.com/maps/search/Padarias+em+Belo+Horizonte"
+                                className="w-full text-[11px] font-semibold rounded-lg p-2.5 bg-white dark:bg-[#0B0B0F] border border-slate-200 dark:border-[#2B2B3A] text-slate-900 dark:text-white focus:outline-none focus:border-[#8B2EFF]"
+                              />
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <div className="flex justify-between items-center text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                                <span>Quantidade de Leads para Gerar</span>
+                                <span className="text-[#8B2EFF] font-bold">{mapsLimit} Leads</span>
+                              </div>
+                              <input
+                                type="range"
+                                min={3}
+                                max={20}
+                                value={mapsLimit}
+                                onChange={(e) => setMapsLimit(Number(e.target.value))}
+                                className="w-full accent-[#8B2EFF] bg-slate-200 dark:bg-[#2B2B3A] h-1.5 rounded-lg cursor-pointer"
+                              />
+                            </div>
+
+                            <button
+                              type="submit"
+                              disabled={isExtracting}
+                              className="w-full py-2.5 bg-[#8B2EFF] hover:bg-[#8B2EFF]/90 disabled:bg-slate-700/50 disabled:cursor-not-allowed text-white text-[10px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer flex items-center justify-center gap-2 shadow-glow-purple"
+                            >
+                              {isExtracting ? (
+                                <>
+                                  <svg className="animate-spin h-3.5 w-3.5 text-white" viewBox="0 0 24 24" fill="none">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                  </svg>
+                                  Processando Extrator Offline...
+                                </>
+                              ) : (
+                                "Importar Links & Iniciar como Dev"
+                              )}
+                            </button>
+                          </form>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
 
                   {/* Switch Card Footer */}
