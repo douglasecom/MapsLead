@@ -4,6 +4,7 @@ import {
   XCircle, AlertCircle, Sparkles, Terminal, FileCode, Check, Send
 } from "lucide-react";
 import { ApiConfigPanel } from "./ApiConfigPanel";
+import { getApiUrl } from "../utils/api";
 
 interface IntegrationStatus {
   status: "OK" | "FAIL" | "LOADING" | "IDLE";
@@ -39,7 +40,7 @@ export const SystemHealthDashboard: React.FC<SystemHealthDashboardProps> = ({ tr
     });
 
     try {
-      const response = await fetch("/api/health/integrations");
+      const response = await fetch(getApiUrl("/api/health/integrations"));
       if (!response.ok) {
         throw new Error(`Erro na rota de diagnósticos (${response.status})`);
       }

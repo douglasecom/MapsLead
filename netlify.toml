@@ -1,0 +1,15 @@
+# netlify.toml
+# Configuration file for static deployment environments (Netlify)
+# Transparently proxies all backend endpoints (/api/*) to the live Google Cloud Run Express server
+# and correctly handles client-side SPA routing fallbacks.
+
+[[redirects]]
+  from = "/api/*"
+  to = "https://ais-pre-ngxruki73rlyomvbcmwvoz-502327203387.us-west2.run.app/api/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

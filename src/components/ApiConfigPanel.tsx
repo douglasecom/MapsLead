@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db, auth } from "../firebase";
+import { getApiUrl } from "../utils/api";
 
 interface ServiceReport {
   status: "OK" | "FAIL" | "LOADING" | "IDLE";
@@ -122,7 +123,7 @@ export const ApiConfigPanel: React.FC<ApiConfigPanelProps> = ({ triggerNotificat
         }
         
         // 3. Fallback check if the server environment has a live configuration
-        const res = await fetch("/api/config/maps");
+        const res = await fetch(getApiUrl("/api/config/maps"));
         if (res.ok) {
           const srvData = await res.json();
           if (srvData && srvData.hasKey && !loadedKey) {
@@ -171,7 +172,7 @@ export const ApiConfigPanel: React.FC<ApiConfigPanelProps> = ({ triggerNotificat
       await persistReportToFirestore(validationReport, apiKey.trim(), billingConfig);
 
       // 2. Sync to local runtime variables
-      const response = await fetch("/api/config/maps/save", {
+      const response = await fetch(getApiUrl("/api/config/maps/save"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ key: apiKey.trim() })
@@ -210,7 +211,7 @@ export const ApiConfigPanel: React.FC<ApiConfigPanelProps> = ({ triggerNotificat
     });
 
     try {
-      const res = await fetch("/api/config/maps/validate", {
+      const res = await fetch(getApiUrl("/api/config/maps/validate"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ key: targetKey })
@@ -302,7 +303,7 @@ export const ApiConfigPanel: React.FC<ApiConfigPanelProps> = ({ triggerNotificat
     }));
 
     try {
-      const res = await fetch("/api/config/maps/validate", {
+      const res = await fetch(getApiUrl("/api/config/maps/validate"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ key: targetKey, service })

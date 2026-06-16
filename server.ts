@@ -4,6 +4,7 @@
  */
 
 import express from "express";
+import cors from "cors";
 import path from "path";
 import fs from "fs";
 import dotenv from "dotenv";
@@ -18,16 +19,42 @@ dotenv.config();
 const app = express();
 app.use(express.json());
 
-// CORS headers configuration to enable seamless integrations on custom domains
-app.use((req, res, next) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, asaas-access-token");
-  if (req.method === "OPTIONS") {
-    return res.sendStatus(200);
-  }
-  next();
-});
+// CORS Middleware Configuration (Supporting Multi-Tenant Custom Domains and Subdomains)
+const allowedOrigins = [
+  "https://maps-lead-nine.vercel.app",
+  "https://prospect.adshive.online"
+];
+
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, callback) => {
+    // If no origin, permit (e.g. server-to-server or non-browser/curl calls)
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+
+    const isAllowed = allowedOrigins.includes(origin) ||
+                      /^https?:\/\/localhost(:\d+)?$/.test(origin) ||
+                      /^https?:\/\/127\.0\.0\.1(:\d+)?$/.test(origin) ||
+                      origin.includes("ais-dev-") ||
+                      origin.includes("ais-pre-") ||
+                      origin.includes("adshive.online") ||
+                      origin.includes(".vercel.app");
+
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      // Direct pass-through supporting arbitrary custom clients with dynamic origin reflection
+      callback(null, true);
+    }
+  },
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "asaas-access-token"],
+  credentials: true,
+  optionsSuccessStatus: 200
+};
+
+app.use(cors(corsOptions));
 
 const PORT = 3000;
 
@@ -1665,7 +1692,7 @@ app.post("/api/leads/import-maps-link", async (req, res) => {
 // GENERATE MATCHING LEADS DYNAMICALLY WITH DATABASE INTEGRATED CACHING (ADSHIVE BI CA ENGINE)
 app.post("/api/leads/generate", async (req, res) => {
   try {
-    const { niche, location, limit = 10 } = req.body || {};
+    const { niche, location, limit = 10, radius } = req.body || {};
     const limitValue = Math.max(1, Math.min(Math.round(Number(limit)) || 10, 20));
 
     const resolvedNiche = niche || "Padaria";
@@ -1781,10 +1808,17 @@ app.post("/api/leads/generate", async (req, res) => {
       };
 
       if (lat !== null && lng !== null) {
+        let radiusMeters = 12000.0;
+        if (radius) {
+          const parsedRadius = parseFloat(radius);
+          if (!isNaN(parsedRadius) && parsedRadius > 0) {
+            radiusMeters = parsedRadius * 1000.0;
+          }
+        }
         placesPayload.locationBias = {
           circle: {
             center: { latitude: lat, longitude: lng },
-            radius: 12000.0 // 12km bounds
+            radius: radiusMeters
           }
         };
       }

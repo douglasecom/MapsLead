@@ -420,8 +420,10 @@ export default function App() {
   // Lead Search state
   const [searchNiche, setSearchNiche] = useState<string>("Padaria");
   const [searchLocation, setSearchLocation] = useState<string>("São Paulo, SP");
+  const [searchRadius, setSearchRadius] = useState<number>(12); // Default 12 km
   const [quantity, setQuantity] = useState<number>(50);
   const [searchResults, setSearchResults] = useState<Lead[]>([]);
+  const [isSandboxFallback, setIsSandboxFallback] = useState<boolean>(false);
   const [isSearching, setIsSearching] = useState<boolean>(false);
   const [searchedYet, setSearchedYet] = useState<boolean>(false);
   const [selectedMapPin, setSelectedMapPin] = useState<Lead | null>(null);
@@ -814,6 +816,7 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
 
     setIsSearching(true);
     setSearchedYet(true);
+    setIsSandboxFallback(false);
     
     const nicheToUse = customNiche || searchNiche;
     const locationToUse = customLocation || searchLocation;
@@ -825,6 +828,7 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
         body: JSON.stringify({
           niche: nicheToUse,
           location: locationToUse,
+          radius: searchRadius,
           limit: quantity / 5 // Scale the range input to realistic result lists
         })
       });
@@ -875,6 +879,7 @@ Podemos conversar 5 minutos sobre como aumentar seu fluxo de clientes? 🚀`);
         }));
         
         setSearchResults(formattedLeads);
+        setIsSandboxFallback(!!data.isSandboxFallback);
         if (data.isSandboxFallback) {
           triggerNotification("Simulador Ativo: Exibindo prospecção realista de IA (Sua chave Google Cloud necessita ativar o faturamento).", "info");
         } else {
@@ -1931,7 +1936,10 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
 
                       {/* Localização input */}
                       <div className="flex flex-col gap-1.5">
-                        <label className="text-[11px] font-bold text-slate-400 tracking-wider uppercase">Localização / Cidade</label>
+                        <div className="flex justify-between items-center">
+                          <label className="text-[11px] font-bold text-slate-400 tracking-wider uppercase">Localização / Cidade</label>
+                          <span className="text-xs font-bold text-blue-600 font-mono bg-blue-50 px-2 py-0.5 rounded-full">Raio: {searchRadius} km</span>
+                        </div>
                         <div className="relative">
                           <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
                           <input 
@@ -1941,6 +1949,28 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
                             className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 pl-11 pr-4 font-bold text-sm text-slate-800 focus:bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition-all outline-none" 
                             placeholder="Ex: São Paulo, SP ou Copacabana, RJ"
                           />
+                        </div>
+
+                        {/* Search Radius Slider (in km) next to/associated with location */}
+                        <div className="space-y-1.5 mt-1 bg-slate-50 border border-slate-200/60 p-2.5 rounded-xl">
+                          <div className="flex justify-between text-[10px] text-slate-500 font-bold">
+                            <span className="uppercase tracking-wider">Raio Ecológico</span>
+                            <span className="text-blue-600 font-mono font-black">{searchRadius} km</span>
+                          </div>
+                          <input 
+                            type="range" 
+                            min="2" 
+                            max="50" 
+                            step="1"
+                            value={searchRadius} 
+                            onChange={(e) => setSearchRadius(Number(e.target.value))} 
+                            className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                          />
+                          <div className="flex justify-between text-[9px] text-slate-400 font-extrabold uppercase">
+                            <span>2 km (Bairro)</span>
+                            <span>Aglomerado local</span>
+                            <span>50 km max</span>
+                          </div>
                         </div>
                       </div>
 
@@ -2021,6 +2051,18 @@ Gostaria de agendar um rápido feedback de 5 minutos ainda essa semana? 🚀`;
                     <h3 className="font-extrabold text-xl text-slate-800">Resultados da Pesquisa</h3>
                     <span className="text-xs text-slate-400 font-bold">Exibindo {searchResults.length} empresas identificadas</span>
                   </div>
+
+                  {isSandboxFallback && (
+                    <div className="bg-amber-50/80 dark:bg-amber-950/10 border border-amber-300/60 dark:border-amber-500/15 p-4 rounded-2xl flex items-start gap-3">
+                      <span className="text-xl">⚡</span>
+                      <div className="space-y-1">
+                        <p className="text-xs font-black text-amber-800 dark:text-amber-400 uppercase tracking-wider">Modo de Prospecção Realista (Simulador de Contingência Ativo)</p>
+                        <p className="text-[11px] text-amber-700/90 dark:text-amber-300/80 font-semibold leading-relaxed">
+                          Portfólio de contingência ativado devido a erro na API do Google Meu Negócio (Faturamento 403 / Sem Crédito Real). Para garantir sua produtividade sem interrupções, o AdsHive gerou leads modelados por inteligência artificial fidedigna e cache de dados offline!
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
                   {searchResults.length === 0 && !isSearching && (
                     <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center text-slate-500">
